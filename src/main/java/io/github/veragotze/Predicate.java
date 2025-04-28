@@ -31,8 +31,10 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 
 	/**
 	 * 
-	 * @param currentBPU The current basic property unit on which the built
-	 *                   configuration will be generated (generally a parcel)
+	 * @param currentBPU            The current basic property unit on which the
+	 *                              built
+	 *                              configuration will be generated (generally a
+	 *                              parcel)
 	 * @param maximalFloorAreaRatio maximal floor area ratio (FloorArea/ParcelArea)
 	 * @throws Exception an exception
 	 */
@@ -90,6 +92,20 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	@Override
 	public boolean check(C c, M m) {
 		List<O> lO = m.getBirth();
+		for (CadastralParcel currentParcel : currentBPU.getCadastralParcels()) {
+			try {
+				Geometry parcelGeometry = AdapterFactory.toGeometry(new GeometryFactory(), currentParcel.getGeom());
+				for (O cuboid : lO) {
+					if (parcelGeometry.contains(cuboid.toGeometry().getCentroid())) {
+						if (!parcelGeometry.contains(cuboid.toGeometry())) {
+							return false;
+						}
+					}
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
 		for (O cuboid : lO) {
 			// FIXME We might have multiple windows for watch for it
 			if (!window.contains(cuboid.toGeometry())) {
@@ -148,41 +164,26 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 			return true;
 		}
 
-		// // On calcule la surface couverte par l'ensemble des cuboid
-		// int nbElem = lCuboid.size();
-
-		// Geometry geom = lCuboid.get(0).toGeometry();
-
-		// for (int i = 1; i < nbElem; i++) {
-
-		// 	geom = geom.union(lCuboid.get(i).toGeometry());
-
-		// }
-
-		List<AbstractSimpleBuilding> lBatIni = new ArrayList<>();
-		for (ISimPLU3DPrimitive s : lCuboid) {
-			lBatIni.add((AbstractSimpleBuilding) s);
+		for (CadastralParcel currentParcel : currentBPU.getCadastralParcels()) {
+			try {
+				Geometry parcelGeometry = AdapterFactory.toGeometry(new GeometryFactory(), currentParcel.getGeom());
+				List<AbstractSimpleBuilding> buildings = new ArrayList<>();
+				for (O cuboid : lCuboid) {
+					if (parcelGeometry.contains(cuboid.toGeometry().getCentroid())) {
+						buildings.add((AbstractSimpleBuilding) cuboid);
+					}
+				}
+				if (!respectMaximalFloorAreaRatioForParcel(buildings, parcelGeometry.getArea())) {
+					return false;
+				}
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
 		}
-
+		return true;
+	}
+	private boolean respectMaximalFloorAreaRatioForParcel(List<AbstractSimpleBuilding> buildings, double area) {
 		SDPCalc computation = new SDPCalc(2.5);
-		double airePAr = 0;
-		for (CadastralParcel cP : currentBPU.getCadastralParcels()) {
-			airePAr = airePAr + cP.getArea();
-		}
-		return computation.process(lBatIni) / airePAr <= maximalFloorAreaRatio;
-		
-		/*
-		 * List<List<AbstractSimpleBuilding>> groupes =
-		 * CuboidGroupCreation.createGroup(lBatIni, 0.5); if (groupes.size() > 1) {
-		 * return false; }
-		 */
-
-		// On récupère la superficie de la basic propertyUnit
-		// double airePAr = 0;
-		// for (CadastralParcel cP : currentBPU.getCadastralParcels()) {
-		// 	airePAr = airePAr + cP.getArea();
-		// }
-
-		// return ((geom.getArea() / airePAr) <= maximalCES);
+		return computation.process(buildings) / area <= maximalFloorAreaRatio;
 	}
 }

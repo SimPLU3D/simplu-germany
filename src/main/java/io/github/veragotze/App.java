@@ -31,13 +31,17 @@ public class App {
         // contains the data
         // Load default environment (data are in resource directory)
         AttribNames.setATT_CODE_PARC("OID_1");
-        File folder = new File(App.class.getClassLoader().getResource("munich/").getPath());
+        File folder = new File(App.class.getClassLoader().getResource("munich_group/").getPath());
         Environnement env = Loader.load(folder, null);
         // Select a parcel on which generation is proceeded
+        BasicPropertyUnit propertyUnit = new BasicPropertyUnit();
+        propertyUnit.setId(0);
+        // quick trick
         for (BasicPropertyUnit bPU : env.getBpU()) {
-            System.out.println("BasicPropertyUnit : " + bPU.getId() + " "+ bPU.getGeom());
+            // System.out.println("BasicPropertyUnit : " + bPU.getId() + " "+ bPU.getGeom());
             for (CadastralParcel p: bPU.getCadastralParcels()) {
-                System.out.println(p.getCode());
+                // System.out.println(p.getCode());
+                propertyUnit.getCadastralParcels().add(p);
             }
         }
         IFeatureCollection<IFeature> fensters = Loader.readShapefile(new File(folder, "fenster.shp"));
@@ -52,13 +56,13 @@ public class App {
         p.set("minheight", fensterFloors*2.5);
 		p.set("maxheight", fensterFloors*3.5);
 
-        BasicPropertyUnit bPU = env.getBpU().get(0);
-        IGeometry window = bPU.getGeom().intersection(fensterGeom);
+        // BasicPropertyUnit bPU = env.getBpU().get(0);
+        IGeometry window = fensterGeom;//bPU.getGeom().intersection(fensterGeom);
         System.out.println("window="+window);
-        // Maximal ratio built area
-        double maximalCES = 0.7;
+        // Maximal floor space ratio
+        double maximalCOS = 0.7;
         // Instanciation of a predicate class
-        Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred = new Predicate<>(bPU, maximalCES, window);
+        Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred = new Predicate<>(propertyUnit, maximalCOS, window);
         // Step 3 : Defining the regulation that will be applied during the simulation
         // Instantiation of the sampler
         // OptimisedBuildingsCuboidFinalDirectRejection oCB = new OptimisedBuildingsCuboidFinalDirectRejection();
@@ -66,10 +70,10 @@ public class App {
         // Loading the parameters for the building shape generation
         // Run of the optimisation on a parcel with the predicate
         System.out.println("START");
-        GraphConfiguration<Cuboid> cc = oCB.process(bPU, window, p, env, 1, pred);
+        GraphConfiguration<Cuboid> cc = oCB.process(propertyUnit, window, p, env, 1, pred);
         // 4 - Writting the output
-        ExportAsFeatureCollection exporter = new ExportAsFeatureCollection(cc, bPU.getId());
+        ExportAsFeatureCollection exporter = new ExportAsFeatureCollection(cc, propertyUnit.getId());
   		ShapefileWriter.write(exporter.getFeatureCollection(), outputFolder + "out.shp",   CRS.decode("EPSG:25832"));
-        System.out.println("ALL DONE!");
+        System.out.println("ALL DONE! " + (outputFolder + "out.shp"));
     }
 }
