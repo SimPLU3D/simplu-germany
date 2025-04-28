@@ -38,12 +38,11 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	 * @param maximalFloorAreaRatio maximal floor area ratio (FloorArea/ParcelArea)
 	 * @throws Exception an exception
 	 */
-	public Predicate(BasicPropertyUnit currentBPU, double maximalFloorAreaRatio, IGeometry window) throws Exception {
-		// On appelle l'autre connstructeur qui renseigne un certain nombre de
-		// géométries
+	public Predicate(BasicPropertyUnit currentBPU, double maximalFloorAreaRatio, Geometry window) throws Exception {
+		// On appelle l'autre connstructeur qui renseigne un certain nombre de géométries
 		this(currentBPU);
 		this.maximalFloorAreaRatio = maximalFloorAreaRatio;
-		this.window = AdapterFactory.toGeometry(new GeometryFactory(), window);
+		this.window = window;
 	}
 
 	Geometry surface = null;

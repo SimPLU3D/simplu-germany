@@ -45,21 +45,21 @@ import fr.ign.simulatedannealing.visitor.Visitor;
  **/
 public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 
-	public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, SimpluParameters p, Environnement env, int id,
-			ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred) {
-		return this.process(bpu, p, env, id, pred,
-				new ArrayList<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>>());
-	}
+// 	public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, SimpluParameters p, Environnement env, int id,
+// 			ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred) {
+// 		return this.process(bpu, p, env, id, pred,
+// 				new ArrayList<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>>());
+// 	}
  
 
-   public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, SimpluParameters p, Environnement env, int id,
-           ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred, 
-           GraphConfiguration<Cuboid> conf) {
-  // Géométrie de l'unité foncière sur laquelle porte la génération
-     IGeometry geom = bpu.generateGeom().buffer(1);
-       return this.process(bpu,geom, p, env, id, pred,
-               new ArrayList<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>>(), conf);
-   }
+//    public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, SimpluParameters p, Environnement env, int id,
+//            ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred, 
+//            GraphConfiguration<Cuboid> conf) {
+//   // Géométrie de l'unité foncière sur laquelle porte la génération
+//      IGeometry geom = bpu.generateGeom().buffer(1);
+//        return this.process(bpu,geom, p, env, id, pred,
+//                new ArrayList<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>>(), conf);
+//    }
 
 	
 	
@@ -70,14 +70,14 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 				new ArrayList<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>>());
 	}
 
-	public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, SimpluParameters p, Environnement env, int id,
-			ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred,
-			List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>> lSupplementaryVisitors) {
-		// Géométrie de l'unité foncière sur laquelle porte la génération
-		IGeometry geom = bpu.generateGeom().buffer(1);
-		return this.process(bpu, geom, p, env, id, pred, lSupplementaryVisitors);
+	// public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, SimpluParameters p, Environnement env, int id,
+	// 		ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred,
+	// 		List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>> lSupplementaryVisitors) {
+	// 	// Géométrie de l'unité foncière sur laquelle porte la génération
+	// 	IGeometry geom = bpu.generateGeom().buffer(1);
+	// 	return this.process(bpu, geom, p, env, id, pred, lSupplementaryVisitors);
 
-	}
+	// }
 	
 	
 	public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, IGeometry geom, SimpluParameters p,
