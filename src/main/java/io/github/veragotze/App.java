@@ -84,8 +84,8 @@ public class App {
         // BasicPropertyUnit bPU = env.getBpU().get(0);
         // IGeometry window = fensterGeom;//bPU.getGeom().intersection(fensterGeom);
         // System.out.println("window="+window);
-        // Maximal floor space ratio
-        double maximalCOS = 0.7;
+        // Maximal ratio built area
+        double maximalCOS = Double.parseDouble(Loader.readShapefile(new File(folder, "plan.shp")).get(0).getAttribute("FSI").toString());
         // Instanciation of a predicate class
         Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred = new Predicate<>(
                 propertyUnit, maximalCOS, windows);
