@@ -2,7 +2,10 @@ package io.github.veragotze;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.geotools.referencing.CRS;
@@ -36,11 +39,15 @@ public class App {
         // contains the data
         // Load default environment (data are in resource directory)
         AttribNames.setATT_CODE_PARC("OID_1");
-        File folder = new File(App.class.getClassLoader().getResource("munich_overlap/").getPath());
+        File folder = new File(App.class.getClassLoader().getResource("munich_full/").getPath());
         Environnement env = Loader.load(folder, null);
+        IFeatureCollection<IFeature> fensters = Loader.readShapefile(new File(folder, "fenster.shp"));
+        Map<String, Double> plan2FSI = new HashMap<>();
+        Loader.readShapefile(new File(folder, "plan.shp")).stream().forEach(f->plan2FSI.put(f.getAttribute("TEILGEBIET").toString(),Double.parseDouble(f.getAttribute("FSI").toString())));
         // Select a parcel on which generation is proceeded
         BasicPropertyUnit propertyUnit = new BasicPropertyUnit();
         propertyUnit.setId(0);
+        Map<CadastralParcel, Double> parcel2FSI = new HashMap<>();
         // quick trick
         for (BasicPropertyUnit bPU : env.getBpU()) {
             // System.out.println("BasicPropertyUnit : " + bPU.getId() + " "+
@@ -48,9 +55,11 @@ public class App {
             for (CadastralParcel p : bPU.getCadastralParcels()) {
                 // System.out.println(p.getCode());
                 propertyUnit.getCadastralParcels().add(p);
+                // FIXME here we assume that all fensters have the same zoning plan: we might want to sort them by descending intersection area with the parcel?
+                Set<Double> fsis = fensters.select(p.getGeom()).stream().map(f->plan2FSI.get(f.getAttribute("TEILGEBIET").toString())).collect(Collectors.toSet());
+                parcel2FSI.put(p, fsis.iterator().next());
             }
         }
-        IFeatureCollection<IFeature> fensters = Loader.readShapefile(new File(folder, "fenster.shp"));
         List<Window<Geometry>> windows = new ArrayList<>();
         // List<Geometry> windows = new ArrayList<>();
         // List<Double> windowsMinHeight = new ArrayList<>();
@@ -85,10 +94,10 @@ public class App {
         // IGeometry window = fensterGeom;//bPU.getGeom().intersection(fensterGeom);
         // System.out.println("window="+window);
         // Maximal ratio built area
-        double maximalCOS = Double.parseDouble(Loader.readShapefile(new File(folder, "plan.shp")).get(0).getAttribute("FSI").toString());
+        // double maximalCOS = Double.parseDouble(Loader.readShapefile(new File(folder, "plan.shp")).get(0).getAttribute("FSI").toString());
         // Instanciation of a predicate class
         Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred = new Predicate<>(
-                propertyUnit, maximalCOS, windows);
+                propertyUnit, parcel2FSI, windows);
         // Step 3 : Defining the regulation that will be applied during the simulation
         // Instantiation of the sampler
         // OptimisedBuildingsCuboidFinalDirectRejection oCB = new

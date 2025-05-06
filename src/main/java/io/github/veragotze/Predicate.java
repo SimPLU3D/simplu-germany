@@ -3,6 +3,7 @@ package io.github.veragotze;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -22,7 +23,7 @@ import fr.ign.rjmcmc.configuration.ConfigurationModificationPredicate;
 public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConfiguration<O, C, M>, M extends AbstractBirthDeathModification<O, C, M>>
 		implements ConfigurationModificationPredicate<C, M> {
 
-	private double maximalFloorAreaRatio = 0.0;
+	private Map<CadastralParcel, Double> maximalFloorAreaRatios;
 
 	// BasicPropertyUnit utilisée
 	private BasicPropertyUnit currentBPU;
@@ -35,15 +36,15 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	 *                              built
 	 *                              configuration will be generated (generally a
 	 *                              parcel)
-	 * @param maximalFloorAreaRatio maximal floor area ratio (FloorArea/ParcelArea)
+	 * @param maximalFloorAreaRatios maximal floor area ratio (FloorArea/ParcelArea)
 	 * @throws Exception an exception
 	 */
-	public Predicate(BasicPropertyUnit currentBPU, double maximalFloorAreaRatio, List<Window<Geometry>> windows)
+	public Predicate(BasicPropertyUnit currentBPU, Map<CadastralParcel, Double> maximalFloorAreaRatios, List<Window<Geometry>> windows)
 			throws Exception {
 		// On appelle l'autre connstructeur qui renseigne un certain nombre de
 		// géométries
 		this(currentBPU);
-		this.maximalFloorAreaRatio = maximalFloorAreaRatio;
+		this.maximalFloorAreaRatios = maximalFloorAreaRatios;
 		this.windows = windows;
 	}
 
@@ -177,7 +178,7 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 						buildings.add((AbstractSimpleBuilding) cuboid);
 					}
 				}
-				if (!respectMaximalFloorAreaRatioForParcel(buildings, parcelGeometry.getArea())) {
+				if (!respectMaximalFloorAreaRatioForParcel(buildings, parcelGeometry.getArea(), maximalFloorAreaRatios.get(currentParcel))) {
 					return false;
 				}
 			} catch (Exception e) {
@@ -187,7 +188,7 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 		return true;
 	}
 
-	private boolean respectMaximalFloorAreaRatioForParcel(List<AbstractSimpleBuilding> buildings, double area) {
+	private boolean respectMaximalFloorAreaRatioForParcel(List<AbstractSimpleBuilding> buildings, double area, double maximalFloorAreaRatio) {
 		SDPCalc computation = new SDPCalc(2.5);
 		return computation.process(buildings) / area <= maximalFloorAreaRatio;
 	}

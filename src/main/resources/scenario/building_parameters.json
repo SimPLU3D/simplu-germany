@@ -14,7 +14,7 @@
     "showbackground": "true",
     "csvfilename": "export.csv",
     "shapefilewriter": "false",
-    "end_test_type": "relative",
+    "end_test_type": "composite",
     "filmvisitor": "false",
     "filmvisitorvecty": "-20",
     "filmvisitorvectx": "-15",
