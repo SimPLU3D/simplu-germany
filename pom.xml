@@ -7,29 +7,28 @@
   <packaging>jar</packaging>
   <version>1.0-SNAPSHOT</version>
   <name>simplu-germany</name>
-  <url>http://maven.apache.org</url>
-
-  <properties>
-  <maven.compiler.source>1.8</maven.compiler.source>
-  <maven.compiler.target>1.8</maven.compiler.target>
-  </properties>
+  <url>https://github.com/SimPLU3D/simplu-germany</url>
 
   <dependencies>
     <dependency>
-      <groupId>fr.ign.cogit</groupId>
-      <artifactId>simplu3d</artifactId>
-      <version>1.3</version>
+      <groupId>io.github.ignf</groupId>
+      <artifactId>librjmcmc4j-geometry</artifactId>
+      <version>1.2.2</version>
     </dependency>
     <dependency>
-      <groupId>fr.ign.cogit</groupId>
-      <artifactId>simplu3d-rules</artifactId>
-      <version>1.3</version>
+      <groupId>io.github.ignf</groupId>
+      <artifactId>simplu3d</artifactId>
+      <version>1.4</version>
     </dependency>
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>3.8.1</version>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.javassist</groupId>
+      <artifactId>javassist</artifactId>
+      <version>3.30.2-GA</version>
     </dependency>
   </dependencies>
 
@@ -38,14 +37,14 @@
       <id>central</id>
       <url>https://repo.maven.apache.org/maven2</url>
     </repository>
-    <repository>
+    <!-- <repository>
       <id>simplu3d-rules</id>
       <url>https://maven.pkg.github.com/SimPLU3D/simplu3D-rules</url>
     </repository>
     <repository>
       <id>simplu3d</id>
       <url>https://maven.pkg.github.com/SimPLU3D/simplu3D</url>
-    </repository>
+    </repository> -->
     <repository>
       <id>geoxygene</id>
       <url>https://raw.githubusercontent.com/IGNF/geoxygene/d8a54d0bce628d95db4229bc145f622ad390858c/geoxygene-sig3d-gui/repository/</url>
@@ -59,4 +58,54 @@
       </snapshots>
     </repository> 
   </repositories>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.8.1</version>
+        <configuration>
+          <source>17</source>
+          <target>17</target>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencyManagement>
+  
+
+    <dependencies>
+
+      <dependency>
+        <groupId>org.glassfish.jaxb</groupId>
+        <artifactId>jaxb-runtime</artifactId>
+        <version>2.4.0-b180830.0438</version>
+      </dependency>
+
+
+      <dependency>
+        <groupId>javax.xml.bind</groupId>
+        <artifactId>jaxb-api</artifactId>
+        <version>2.4.0-b180830.0359</version>
+      </dependency>
+
+
+      <dependency>
+        <groupId>junit</groupId>
+        <artifactId>junit</artifactId>
+        <version>4.13.2</version>
+      </dependency>
+
+    
+
+      <dependency>
+        <groupId>com.sun.xml.bind</groupId>
+        <artifactId>jaxb-impl</artifactId>
+        <version>4.0.5</version>
+      </dependency>
+
+    </dependencies>
+
+  </dependencyManagement>
 </project>

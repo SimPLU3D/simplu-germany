@@ -27,7 +27,7 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	// BasicPropertyUnit utilisée
 	private BasicPropertyUnit currentBPU;
 
-	private Geometry window;
+	private List<Window<Geometry>> windows;
 
 	/**
 	 * 
@@ -38,11 +38,13 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	 * @param maximalFloorAreaRatio maximal floor area ratio (FloorArea/ParcelArea)
 	 * @throws Exception an exception
 	 */
-	public Predicate(BasicPropertyUnit currentBPU, double maximalFloorAreaRatio, Geometry window) throws Exception {
-		// On appelle l'autre connstructeur qui renseigne un certain nombre de géométries
+	public Predicate(BasicPropertyUnit currentBPU, double maximalFloorAreaRatio, List<Window<Geometry>> windows)
+			throws Exception {
+		// On appelle l'autre connstructeur qui renseigne un certain nombre de
+		// géométries
 		this(currentBPU);
 		this.maximalFloorAreaRatio = maximalFloorAreaRatio;
-		this.window = window;
+		this.windows = windows;
 	}
 
 	Geometry surface = null;
@@ -107,9 +109,12 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 		}
 		for (O cuboid : lO) {
 			// FIXME We might have multiple windows for watch for it
-			if (!window.contains(cuboid.toGeometry())) {
+			if (!windows.stream().map(w -> w.geometry).anyMatch(w -> w.contains(cuboid.toGeometry()))) {
 				return false;
 			}
+			// if (!windows.contains(cuboid.toGeometry())) {
+			// return false;
+			// }
 		}
 		// Check maximalFloorAreaRatio
 		if (!respectMaximalFloorAreaRatio(c, m)) {
@@ -181,6 +186,7 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 		}
 		return true;
 	}
+
 	private boolean respectMaximalFloorAreaRatioForParcel(List<AbstractSimpleBuilding> buildings, double area) {
 		SDPCalc computation = new SDPCalc(2.5);
 		return computation.process(buildings) / area <= maximalFloorAreaRatio;

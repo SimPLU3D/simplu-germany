@@ -55,7 +55,7 @@ public class Loader {
 		IFeatureCollection<IFeature> pluColl = readShapefile(fileDoc);
 		IFeatureCollection<IFeature> zoneColl = readShapefile(fileZonage);
 		IFeatureCollection<IFeature> parcelleColl = readShapefile(fileParcels);
-		IFeatureCollection<IFeature> fensterColl = readShapefile(fileFenster);
+		// IFeatureCollection<IFeature> fensterColl = readShapefile(fileFenster);
 		IFeatureCollection<IFeature> voirieColl = readShapefile(fileVoirie);
 		IFeatureCollection<IFeature> batiColl = readShapefile(fileBuild);
 		IFeatureCollection<IFeature> prescriptions = readShapefile(filePrescLin);
