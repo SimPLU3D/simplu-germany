@@ -30,6 +30,9 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 
 	private List<Window<Geometry>> windows;
 
+	private double roofAngle;
+	private double heightThreshold = 2.3; // federal German rule
+
 	/**
 	 * 
 	 * @param currentBPU            The current basic property unit on which the
@@ -39,13 +42,14 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	 * @param maximalFloorAreaRatios maximal floor area ratio (FloorArea/ParcelArea)
 	 * @throws Exception an exception
 	 */
-	public Predicate(BasicPropertyUnit currentBPU, Map<CadastralParcel, Double> maximalFloorAreaRatios, List<Window<Geometry>> windows)
+	public Predicate(BasicPropertyUnit currentBPU, Map<CadastralParcel, Double> maximalFloorAreaRatios, List<Window<Geometry>> windows, double roofAngle)
 			throws Exception {
 		// On appelle l'autre connstructeur qui renseigne un certain nombre de
 		// géométries
 		this(currentBPU);
 		this.maximalFloorAreaRatios = maximalFloorAreaRatios;
 		this.windows = windows;
+		this.roofAngle = roofAngle;
 	}
 
 	Geometry surface = null;
@@ -190,6 +194,19 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 
 	private boolean respectMaximalFloorAreaRatioForParcel(List<AbstractSimpleBuilding> buildings, double area, double maximalFloorAreaRatio) {
 		SDPCalc computation = new SDPCalc(2.5);
-		return computation.process(buildings) / area <= maximalFloorAreaRatio;
+		double totalRoofSurface = buildings.stream().mapToDouble(b->roofSurface(b, windows.stream().filter(w->w.geometry.contains(b.toGeometry())).findAny().get().roofType)).sum();
+		return (computation.process(buildings) + totalRoofSurface) / area <= maximalFloorAreaRatio;
+	}
+	private double roofSurface(AbstractSimpleBuilding building, String roofType) {
+		switch (roofType) {
+			case "FD":
+				return 0;
+			case "SD":
+				double roofHeight = Math.tan(roofAngle) * Math.min(building.width, building.length) / 2;
+				return (roofHeight > heightThreshold) ? building.getArea() : 0.0;
+			default:
+				break;
+		}
+		return 0;
 	}
 }

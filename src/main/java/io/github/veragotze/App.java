@@ -38,6 +38,8 @@ public class App {
     public static void main(String[] args) throws Exception {
         // Step 0 ; Defining an output existing folder
         String outputFolder = "./output_roof/";
+        double roofAngleInDegrees = 40.0;
+        double roofAngle = roofAngleInDegrees * Math.PI / 180.0;
         // Step 1 : Creating the geographic environnement using the repository that
         // contains the data
         // Load default environment (data are in resource directory)
@@ -71,14 +73,14 @@ public class App {
             int fensterFloors = Integer.parseInt(fenster.getAttribute("GESCH").toString());
             double windowMinHeight = fensterFloors * 2.5;
             double windowMaxHeight = fensterFloors * 3.5;
-            windows.add(new Window<>(fensterGeom, windowMinHeight, windowMaxHeight));
+            windows.add(new Window<>(fensterGeom, windowMinHeight, windowMaxHeight, fenster.getAttribute("DACHFORM").toString()));
         }
         String fileName = "building_parameters.json";
         String folderName = App.class.getClassLoader().getResource("scenario/").getPath();
         SimpluParameters p = new SimpluParametersJSON(new File(folderName + fileName));
         // Instanciation of a predicate class
         Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred = new Predicate<>(
-                propertyUnit, parcel2FSI, windows);
+                propertyUnit, parcel2FSI, windows, roofAngle);
         // Step 3 : Defining the regulation that will be applied during the simulation
         // Instantiation of the sampler
         Optimizer oCB = new Optimizer();
@@ -88,7 +90,7 @@ public class App {
         try {
             List<Window<IGeometry>> windows2 = windows.stream().map(w -> {
                 try {
-                    return new Window<IGeometry>(AdapterFactory.toGM_Object(w.geometry), w.minHeight, w.maxHeight);
+                    return new Window<IGeometry>(AdapterFactory.toGM_Object(w.geometry), w.minHeight, w.maxHeight, w.roofType);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

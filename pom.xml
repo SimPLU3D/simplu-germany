@@ -24,6 +24,10 @@
           <artifactId>geoxygene-sig3d-gui</artifactId>
           <groupId>io.github.ignf</groupId>
         </exclusion>
+        <exclusion>
+          <groupId>org.eclipse.emf</groupId>
+          <artifactId>org.eclipse.emf.common</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
@@ -75,7 +79,7 @@
     </repository> -->
     <repository>
       <id>geoxygene</id>
-      <url>https://raw.githubusercontent.com/IGNF/geoxygene/d8a54d0bce628d95db4229bc145f622ad390858c/geoxygene-sig3d-gui/repository/</url>
+      <url>https://raw.githubusercontent.com/IGNF/geoxygene/refs/heads/master/geoxygene-sig3d-gui/repository/</url>
       <releases>
         <enabled>true</enabled>
         <updatePolicy>always</updatePolicy>

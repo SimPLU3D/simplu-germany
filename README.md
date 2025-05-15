@@ -11,13 +11,13 @@ Group of parcels in same Baufenster: specify whether buildings must touch or kee
 Automatize construction of property units - splitting into simulation areas by plan part 
 
 Roof shapes
-- if gable roof => modify FSI computation. roof slope is written in the legend to the plan. f ex 30-40°
-- export building with roof
-- ridge direction (not specified in plan)
-- roofs count in the FAR calculation where a floor is defined as an inhabitable floor above the ground with a minimum height of 2.3m
+
+- [x] if gable roof => modify FSI computation. roof slope is written in the legend to the plan. f ex 30-40°
+- [x] export building with roof
+- [x] ridge direction (not specified in plan) => we take the largest building in the fenster as a reference for the roofs orientation
+- [x] roofs count in the FAR calculation where a floor is defined as an inhabitable floor above the ground with a minimum height of 2.3m
 
 How to differentiate between exact and maximum floors allowed
-
 
 export MAVEN_OPTS=-Djava.library.path=../simplu3D/lib/native_libraries/linux-amd64
 mvn compile exec:java
