@@ -1,4 +1,4 @@
-## Find better name for Baufenster 
+### Find better name for Baufenster 
 
 ## Group of parcels in same Baufenster: specify whether buildings must touch or keep a minimum distance
 - [ ] finish one and double sided cuboid objects for attached building style
