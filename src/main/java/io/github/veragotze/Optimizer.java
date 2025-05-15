@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.math3.random.MersenneTwister;
 import org.apache.commons.math3.random.RandomGenerator;
 import org.locationtech.jts.geom.GeometryFactory;
 import fr.ign.cogit.geoxygene.api.spatial.coordgeom.IEnvelope;
@@ -70,53 +71,20 @@ import javassist.NotFoundException;
  **/
 public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 
-	// public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu,
-	// SimpluParameters p, Environnement env, int id,
-	// ConfigurationModificationPredicate<GraphConfiguration<Cuboid>,
-	// BirthDeathModification<Cuboid>> pred) {
-	// return this.process(bpu, p, env, id, pred,
-	// new ArrayList<Visitor<GraphConfiguration<Cuboid>,
-	// BirthDeathModification<Cuboid>>>());
-	// }
-
-	// public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu,
-	// SimpluParameters p, Environnement env, int id,
-	// ConfigurationModificationPredicate<GraphConfiguration<Cuboid>,
-	// BirthDeathModification<Cuboid>> pred,
-	// GraphConfiguration<Cuboid> conf) {
-	// // Géométrie de l'unité foncière sur laquelle porte la génération
-	// IGeometry geom = bpu.generateGeom().buffer(1);
-	// return this.process(bpu,geom, p, env, id, pred,
-	// new ArrayList<Visitor<GraphConfiguration<Cuboid>,
-	// BirthDeathModification<Cuboid>>>(), conf);
-	// }
-
 	public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, List<Window<IGeometry>> windows,
 			SimpluParameters p,
-			Environnement env, int id,
+			Environnement env,
 			ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred) {
-		return this.process(bpu, windows, p, env, id, pred,
+		return this.process(bpu, windows, p, env, pred,
 				new ArrayList<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>>());
 	}
 
-	// public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu,
-	// SimpluParameters p, Environnement env, int id,
-	// ConfigurationModificationPredicate<GraphConfiguration<Cuboid>,
-	// BirthDeathModification<Cuboid>> pred,
-	// List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>>
-	// lSupplementaryVisitors) {
-	// // Géométrie de l'unité foncière sur laquelle porte la génération
-	// IGeometry geom = bpu.generateGeom().buffer(1);
-	// return this.process(bpu, geom, p, env, id, pred, lSupplementaryVisitors);
-
-	// }
-
 	public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, List<Window<IGeometry>> windows,
 			SimpluParameters p,
-			Environnement env, int id,
+			Environnement env,
 			ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred,
 			List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>> lSupplementaryVisitors) {
-		return this.process(bpu, windows, p, env, id, pred, lSupplementaryVisitors, null);
+		return this.process(bpu, windows, p, env, pred, lSupplementaryVisitors, null);
 	}
 
 	/**
@@ -136,13 +104,13 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 	 */
 	public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, List<Window<IGeometry>> windows,
 			SimpluParameters p,
-			Environnement env, int id,
+			Environnement env,
 			ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred,
 			List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>> lSupplementaryVisitors,
 			GraphConfiguration<Cuboid> conf) {
 
 		// Sampler creation
-		Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> samp = create_sampler(Random.random(), p,
+		Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> samp = create_sampler(new MersenneTwister(42), p,
 				bpu, pred, windows);
 
 		if (conf == null) {
@@ -156,27 +124,12 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 		// Temperature initialization
 		Schedule<SimpleTemperature> sch = create_schedule(p);
 
-		// We may initialize the initial configuration with existing cuboids
-		// int loadExistingConfig = p.getInteger("load_existing_config");
-		// if (loadExistingConfig == 1) {
-		// String configPath = p.get("config_shape_file").toString();
-		// List<Cuboid> lCuboid = LoaderCuboid.loadFromShapeFile(configPath);
-		// BirthDeathModification<Cuboid> m = conf.newModification();
-		// for (Cuboid c : lCuboid) {
-		// m.insertBirth(c);
-		// }
-		// conf.deltaEnergy(m);
-		// // conf.apply(m);
-		// m.apply(conf);
-		// System.out.println("First update OK");
-		// }
-
 		// The end test condition
 		end = create_end_test(p);
 
 		// The visitors initialisation
 		PrepareVisitors<Cuboid> pv = new PrepareVisitors<>(env, lSupplementaryVisitors);
-		CompositeVisitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> mVisitor = pv.prepare(p, id);
+		CompositeVisitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> mVisitor = pv.prepare(p, 0);
 
 		countV = pv.getCountV();
 
@@ -207,6 +160,7 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 			MultiObjectUniformBirth<Cuboid> objectSampler,
 			double a, double b, double c, double d, double e, double f, double g, double h, double i, double j)
 			throws InstantiationException, IllegalAccessException, IllegalArgumentException, InvocationTargetException {
+		@SuppressWarnings("unchecked")
 		Constructor<U> constr = (Constructor<U>) clazz.getConstructors()[0];
 		U min = constr.newInstance(a, b, c, d, e, 0);
 		U max = constr.newInstance(f, g, h, i, j, Math.PI);
@@ -269,13 +223,15 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 		MultiObjectUniformBirth<Cuboid> objectSampler = new MultiObjectUniformBirth<>();
 		List<Class<? extends Cuboid>> classes = new ArrayList<>();
 		Map<Class<? extends Cuboid>, ObjectBuilder<Cuboid>> builders = new HashMap<>();
+		Map<Class<? extends Cuboid>, Double> windowArea = new HashMap<>();
 		int windowIndex = 0;
 		for (Window<IGeometry> window : windows) {
 			IEnvelope env = window.geometry.envelope();
 			Class<? extends Cuboid> c;
 			try {
 				c = createClass("io.github.veragotze.Cuboid_" + windowIndex);
-				System.err.println("Create window " +windowIndex + " with " + window.minHeight + " - " + window.maxHeight);
+				System.err.println(
+						"Create window " + windowIndex + " with " + window.minHeight + " - " + window.maxHeight);
 				ObjectBuilder<Cuboid> builder;
 				try {
 					builder = Optimizer.add(rng, c, window.geometry.area(), objectSampler, env.minX(),
@@ -283,6 +239,7 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 							window.maxHeight);
 					classes.add(c);
 					builders.put(c, builder);
+					windowArea.put(c, window.geometry.area());
 				} catch (Exception e) {
 					e.printStackTrace();
 				}
@@ -334,26 +291,34 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 		// A factory to create proper kernels
 		KernelFactory<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> factory = new KernelFactory<>();
 		// Adding the birth/death kernel
-		double amplitudeMove = p.getDouble("amplitudeMove");
-		double amplitudeRotate = p.getDouble("amplitudeRotate") * Math.PI / 180;
-		double amplitudeMaxDim = p.getDouble("amplitudeMaxDim");
-		double amplitudeHeight = p.getDouble("amplitudeHeight");
+		double aMove = p.getDouble("amplitudeMove");
+		double aRotate = p.getDouble("amplitudeRotate") * Math.PI / 180;
+		double aMaxDim = p.getDouble("amplitudeMaxDim");
+		double aHeight = p.getDouble("amplitudeHeight");
 		for (Class<? extends Cuboid> c : classes) {
 			System.err.println("CLASS " + c);
-			System.err.println(builders.get(c));
-			System.out.println(objectSampler.getBirth(c));
+			// System.err.println(builders.get(c));
+			// System.out.println(objectSampler.getBirth(c));
+			ObjectBuilder<Cuboid> builder = builders.get(c);
+			double area = windowArea.get(c);
+			double pbirth = p.getDouble("pbirth") * area;
+			double pmove = 0.2 * area;
 			kernels.add(
-					factory.make_uniform_typed_birth_death_kernel(rng, c, builders.get(c), objectSampler.getBirth(c),
-							p.getDouble("pbirth"), 1.0, c.getName()));
-			kernels.add(
-					factory.make_uniform_typed_modification_kernel(rng, c, builders.get(c), new MoveCuboid(amplitudeMove), 0.2, 1.0, 1, 1, "Move"));
-			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builders.get(c), new RotateCuboid(amplitudeRotate), 0.2, 1.0, 1, 1,
+					factory.make_uniform_typed_birth_death_kernel(rng, c, builder, objectSampler.getBirth(c),
+							pbirth, 1.0, c.getName()));
+			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builder, new MoveCuboid(aMove),
+					pmove, 1.0, 1, 1, "Move"));
+			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builder,
+					new RotateCuboid(aRotate), pmove, 1.0, 1, 1,
 					"Rotate"));
-			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builders.get(c), new ChangeWidth(amplitudeMaxDim), 0.2, 1.0, 1, 1,
+			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builder,
+					new ChangeWidth(aMaxDim), pmove, 1.0, 1, 1,
 					"ChgWidth"));
-			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builders.get(c), new ChangeLength(amplitudeMaxDim), 0.2, 1.0, 1, 1,
+			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builder,
+					new ChangeLength(aMaxDim), pmove, 1.0, 1, 1,
 					"ChgLength"));
-			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builders.get(c), new ChangeHeight(amplitudeHeight), 0.2, 1.0, 1, 1,
+			kernels.add(factory.make_uniform_typed_modification_kernel(rng, c, builder,
+					new ChangeHeight(aHeight), pmove, 1.0, 1, 1,
 					"ChgHeight"));
 
 		}
