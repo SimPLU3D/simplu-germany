@@ -1,6 +1,6 @@
 Find better name for Baufenster 
 
-Group of parcels in same Baufenster: specify whether buildings must touch or keep a minimum distance
+##Group of parcels in same Baufenster: specify whether buildings must touch or keep a minimum distance
 - BAUWEISE: 
     - g => buildings have to touch
     - otherwise
