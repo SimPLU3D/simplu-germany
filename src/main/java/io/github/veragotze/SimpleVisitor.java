@@ -35,10 +35,13 @@ public class SimpleVisitor implements Visitor<GraphConfiguration<Cuboid>, BirthD
     String formatInt = "| %1$-12d ";
     String formatStringSmall = "| %1$-5s ";
     List<CadastralParcel> parcels;
+    Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> predicate;
 
-    public SimpleVisitor(PrintStream os, List<CadastralParcel> parcels) {
+    public SimpleVisitor(PrintStream os, List<CadastralParcel> parcels,
+            Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> predicate) {
         this.stream = os;
         this.parcels = parcels;
+        this.predicate = predicate;
     }
 
     @Override
@@ -48,7 +51,8 @@ public class SimpleVisitor implements Visitor<GraphConfiguration<Cuboid>, BirthD
     }
 
     @Override
-    public void begin(GraphConfiguration<Cuboid> config, Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> sampler, Temperature t) {
+    public void begin(GraphConfiguration<Cuboid> config,
+            Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> sampler, Temperature t) {
         this.stream.format("Starting at %1$tH:%1$tM:%1$tS%n", Calendar.getInstance());
         this.formatter = new Formatter(this.stream);
         this.formatter.format(this.formatString, "Iteration");
@@ -59,13 +63,15 @@ public class SimpleVisitor implements Visitor<GraphConfiguration<Cuboid>, BirthD
             String id = p.getCode();
             this.formatter.format(this.formatStringSmall, id.substring(id.length() - 3));
         });
-        stream.println();
+        this.formatter.format(this.formatString, "Energy");
+        stream.println("|");
         stream.flush();
         clock_begin = System.currentTimeMillis();
     }
 
     @Override
-    public void visit(GraphConfiguration<Cuboid> config, Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> sampler, Temperature t) {
+    public void visit(GraphConfiguration<Cuboid> config,
+            Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> sampler, Temperature t) {
         if (sampler == null)
             return;
         ++iter;
@@ -75,7 +81,8 @@ public class SimpleVisitor implements Visitor<GraphConfiguration<Cuboid>, BirthD
                 ListConfiguration<?, ?, ?> c = (ListConfiguration<?, ?, ?>) config;
                 this.formatter.format(this.formatInt, Integer.valueOf(c.size()));
             }
-            List<Cuboid> lCuboid = new ArrayList<>(config.getGraph().vertexSet().stream().map(v->v.getValue()).toList());
+            List<Cuboid> lCuboid = new ArrayList<>(
+                    config.getGraph().vertexSet().stream().map(v -> v.getValue()).toList());
             parcels.stream().forEach(p -> {
                 try {
                     Geometry parcelGeometry = AdapterFactory.toGeometry(new GeometryFactory(), p.getGeom());
@@ -85,20 +92,29 @@ public class SimpleVisitor implements Visitor<GraphConfiguration<Cuboid>, BirthD
                             buildings.add((AbstractSimpleBuilding) cuboid);
                         }
                     }
-                    SDPCalc computation = new SDPCalc(2.5);
-                    double fsi = computation.process(buildings) / parcelGeometry.getArea();
-                    this.formatter.format(this.formatStringSmall, String.valueOf(fsi).substring(0, 5));
+                    try {
+                        double fsi = predicate.computeFSIForParcel(buildings, parcelGeometry.getArea());
+                        String fsiString = String.valueOf(fsi);
+                        if (fsiString.length() > 5) fsiString = fsiString.substring(0, 5);
+                        this.formatter.format(this.formatStringSmall, fsiString);
+                    } catch (Exception e) {
+                        System.err.println("computeFSIForParcel " + buildings.size() + " " + parcelGeometry.getArea());
+                    }
                 } catch (Exception e) {
-
+                    System.err.println("PROBLEM WITH PARCEL " + p.getCode() + " " + p.getGeom());
                 }
             });
-            stream.println();
+            String energyString = String.valueOf(config.getEnergy());
+            if (energyString.length() > 12) energyString = energyString.substring(0, 12);
+            this.formatter.format(this.formatString, energyString);
+            stream.println("|");
             stream.flush();
         }
     }
 
     @Override
-    public void end(GraphConfiguration<Cuboid> config, Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> sampler, Temperature t) {
+    public void end(GraphConfiguration<Cuboid> config,
+            Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> sampler, Temperature t) {
         this.visit(config, sampler, t);
         long clock_end = System.currentTimeMillis();
         this.stream.format("Finished at %1$tH:%1$tM:%1$tS%n", Calendar.getInstance());

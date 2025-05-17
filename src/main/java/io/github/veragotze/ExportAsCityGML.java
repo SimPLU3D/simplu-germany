@@ -138,13 +138,13 @@ public class ExportAsCityGML {
                         l.getControlPoint(l.sizeControlPoint() - 1).getY()));
     }
 
-    private static boolean perpendicular(double a) {
+    private static boolean perpendicular(double a, double tolerance) {
         // System.out.println("angle in " + a);
         // make sure the angle is between -PI and PI
         double angle = (a < -Math.PI) ? a + 2 * Math.PI : (a > Math.PI) ? a - 2 * Math.PI : a;
         // System.out.println("angle norm " + angle);
         // perpendicular enough if angle is between PI/4 and 3PI/4
-        return Math.abs(angle) > Math.PI / 4 && Math.abs(angle) < 3 * Math.PI / 4;
+        return Math.abs(angle) > Math.PI / 2 - tolerance && Math.abs(angle) < Math.PI / 2 + tolerance;
     }
 
     private static List<IOrientableSurface> getGableRoof(IOrientableSurface surface, ILineString edge) {
@@ -155,6 +155,7 @@ public class ExportAsCityGML {
         Vecteur normal = pe.getNormale().getNormalised();
         if (normal.getZ() < 0) {
             System.err.println("reverse roof");
+            System.err.println(surface);
             points = points.reverse();
         }
         double height = rExt.coord().get(0).getZ();
@@ -163,15 +164,25 @@ public class ExportAsCityGML {
         // determine wich edges are perpendicular to the longest edges
         // TODO check if they are end edges too? (perpendicular to previous and next
         // edge)
-        lEExt.forEach(e -> e.setAngle(perpendicular(edgeToLineSegment(e).angle() - segment.angle()) ? 0 : roofAngle));
+        IntStream.range(0, lEExt.size()).forEach(index -> {
+            Edge e = lEExt.get(index);
+            Edge previous = lEExt.get((index == 0) ? lEExt.size()-1 : index -1);
+            Edge next = lEExt.get((index+1)%lEExt.size());
+            double angle = edgeToLineSegment(previous).angle() - edgeToLineSegment(next).angle();
+            boolean isEnd = angle > Math.PI - Math.PI/10 || angle < -Math.PI + Math.PI/10;
+            boolean isPerpendicularToLongestEdge = perpendicular(edgeToLineSegment(e).angle() - segment.angle(), Math.PI/4);
+            System.err.println(isPerpendicularToLongestEdge + " " + isEnd + " " + angle);
+            e.setAngle(isPerpendicularToLongestEdge /*&& isEnd*/ ? 0 : roofAngle);
+        });
         // lEExt.forEach(e->System.err.println("machineangle " + e.getAngle()));
         Loop<Edge> loop = new Loop<Edge>(lEExt);
         lEExt.forEach(e -> e.machine = new Machine(e.getAngle()));
         input.add(loop);
         Skeleton s = new Skeleton(input, true);
         s.skeleton();
-        return s.output.faces.values().stream().map(f -> {
+        return s.output.faces.values().stream().flatMap(f -> {
             System.err.println("face = " + f.pointCount() + " with height " + height);
+            if (f.pointCount() > 0) {
             IPolygon poly = new GM_Polygon();
             for (Loop<Point3d> lP : f.points) {
                 IDirectPositionList dpl = convertLoopCorner(lP);
@@ -188,16 +199,19 @@ public class ExportAsCityGML {
                     poly.addInterior(new GM_Ring(new GM_LineString(dpl)));
                 }
             }
-            // System.err.println("polygon = " + poly);
-            return (IOrientableSurface) poly;
+            System.err.println("polygon =\n" + poly);
+            return Stream.of((IOrientableSurface) poly);
+        } else {
+            return Stream.empty();
+        }
         }).toList();
     }
 
     private static double averageHeight(GM_Polygon p) {
         List<IDirectPosition> list = p.getExterior().coord().getList();
-        PlanEquation pe = new ApproximatedPlanEquation(p);
-        Vecteur normal = pe.getNormale().getNormalised();
-        System.err.println(normal.getX() + ", " + normal.getY() + ", " + normal.getZ());
+        // PlanEquation pe = new ApproximatedPlanEquation(p);
+        // Vecteur normal = pe.getNormale().getNormalised();
+        // System.err.println(normal.getX() + ", " + normal.getY() + ", " + normal.getZ());
         list.remove(list.size() - 1);
         return list.stream().map(c -> c.getZ()).collect(Collectors.summingDouble(Double::doubleValue)) / list.size();
     }
@@ -275,8 +289,9 @@ public class ExportAsCityGML {
                 .collect(Collectors.groupingBy(
                         f -> f.getAttribute("parcelId").toString() + "/" + f.getAttribute("windowId").toString()));
         for (Entry<String, List<IFeature>> entry : grouped.entrySet()) {
+            String parcelId = entry.getKey().split("/")[0];
             String windowId = entry.getKey().split("/")[1];
-            System.out.println("windowId = " + windowId);
+            System.err.println("windowId = " + windowId + " parcelId = " + parcelId);
             String roofShape = fensters.stream().filter(f -> f.getAttribute("OBJECTID").toString().equals(windowId))
                     .findFirst().get().getAttribute("DACHFORM").toString();
             IGeometry union = null;
@@ -326,64 +341,63 @@ public class ExportAsCityGML {
                 Building building = new Building();
                 List<IOrientableSurface> list = ((GM_Solid) union).getFacesList();
                 final List<IOrientableSurface> newList = new ArrayList<>(list);
-                ;
                 if (roofShape.equals("SD")) {
                     // gable roof
-                    System.err.println("longestEdge = " + longestEdge);
+                    // System.err.println("longestEdge = " + longestEdge);
                     List<IOrientableSurface> roofSurfaces = getRoofSurfaces(list);
-                    System.err.println("list1 = " + newList.size());
-                    newList.forEach(p -> System.err.println("list1 = (" + newList.indexOf(p) + ") = " + p));
-                    System.err.println("roof = " + roofSurfaces.size());
-                    roofSurfaces.forEach(p -> System.err.println("roof = (" + newList.indexOf(p) + ") = " + p));
-                    // newList.removeAll(roofSurfaces);
-                    newList.forEach(p -> System.err
-                            .println("test1 = (" + new JtsAlgorithms().equals(p, roofSurfaces.get(0)) + ") = " + p));
+                    // System.err.println("list1 = " + newList.size());
+                    // newList.forEach(p -> System.err.println("list1 = (" + newList.indexOf(p) + ") = " + p));
+                    // System.err.println("roof = " + roofSurfaces.size());
+                    // roofSurfaces.forEach(p -> System.err.println("roof = (" + newList.indexOf(p) + ") = " + p));
+                    newList.removeAll(roofSurfaces);
+                    // newList.forEach(p -> System.err
+                    //         .println("test1 = (" + new JtsAlgorithms().equals(p, roofSurfaces.get(0)) + ") = " + p));
 
-                    newList.forEach(p -> {
-                        try {
-                            System.err.println("test2 = (" + JtsGeOxygene.makeJtsGeom(p));
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-                    org.locationtech.jts.geom.GeometryFactory fact = new org.locationtech.jts.geom.GeometryFactory(
-                            new PrecisionModel(), newList.get(0).getCRS());
-                    newList.forEach(p -> {
-                        try {
-                            System.err.println("test3 = (" + AdapterFactory.toGeometry(fact, p, false));
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-                    newList.forEach(p -> {
-                        try {
-                            System.err.println("test4 = (" + fact.createPolygon(
-                                    (org.locationtech.jts.geom.LinearRing) AdapterFactory.toGeometry(fact,
-                                            ((IPolygon) p).getExterior(), false),
-                                    AdapterFactory.toLinearRingArray(fact,
-                                            ((IPolygon) p).getInterior(), false)));
-                        } catch (Exception e) {
-                            e.printStackTrace();
-                        }
-                    });
-                    System.err.println("test5");
-                    newList.forEach(p -> {
-                        ((IPolygon) p).getExterior().coord()
-                                .forEach(c -> System.err.println(AdapterFactory.toCoordinate(c)));
-                    });
-                    System.err.println("test6");
-                    newList.forEach(p -> {
-                        CoordinateSequence sequence = AdapterFactory.toCoordinateSequence(fact,
-                                ((IPolygon) p).getExterior().coord(), false);
-                        for (int i = 0; i < sequence.size(); i++) {
-                            System.err.println(sequence.getCoordinate(i));
-                        }
-                        System.err.println(fact.createPolygon(sequence));
-                    });
+                    // newList.forEach(p -> {
+                    //     try {
+                    //         System.err.println("test2 = (" + JtsGeOxygene.makeJtsGeom(p));
+                    //     } catch (Exception e) {
+                    //         e.printStackTrace();
+                    //     }
+                    // });
+                    // org.locationtech.jts.geom.GeometryFactory fact = new org.locationtech.jts.geom.GeometryFactory(
+                    //         new PrecisionModel(), newList.get(0).getCRS());
+                    // newList.forEach(p -> {
+                    //     try {
+                    //         System.err.println("test3 = (" + AdapterFactory.toGeometry(fact, p, false));
+                    //     } catch (Exception e) {
+                    //         e.printStackTrace();
+                    //     }
+                    // });
+                    // newList.forEach(p -> {
+                    //     try {
+                    //         System.err.println("test4 = (" + fact.createPolygon(
+                    //                 (org.locationtech.jts.geom.LinearRing) AdapterFactory.toGeometry(fact,
+                    //                         ((IPolygon) p).getExterior(), false),
+                    //                 AdapterFactory.toLinearRingArray(fact,
+                    //                         ((IPolygon) p).getInterior(), false)));
+                    //     } catch (Exception e) {
+                    //         e.printStackTrace();
+                    //     }
+                    // });
+                    // System.err.println("test5");
+                    // newList.forEach(p -> {
+                    //     ((IPolygon) p).getExterior().coord()
+                    //             .forEach(c -> System.err.println(AdapterFactory.toCoordinate(c)));
+                    // });
+                    // System.err.println("test6");
+                    // newList.forEach(p -> {
+                    //     CoordinateSequence sequence = AdapterFactory.toCoordinateSequence(fact,
+                    //             ((IPolygon) p).getExterior().coord(), false);
+                    //     for (int i = 0; i < sequence.size(); i++) {
+                    //         System.err.println(sequence.getCoordinate(i));
+                    //     }
+                    //     System.err.println(fact.createPolygon(sequence));
+                    // });
 
-                    roofSurfaces.forEach(roof -> newList.remove(roof));// FIXME: floor is removed instead !???
-                    System.err.println("list2 = " + newList.size());
-                    newList.forEach(p -> System.err.println("list2 = (" + newList.indexOf(p) + ") = " + p));
+                    // roofSurfaces.forEach(roof -> newList.remove(roof));// FIXME: floor is removed instead !???
+                    // System.err.println("list2 = " + newList.size());
+                    // newList.forEach(p -> System.err.println("list2 = (" + newList.indexOf(p) + ") = " + p));
                     final ILineString edge = longestEdge;
                     // create the gable roofs
                     List<IOrientableSurface> aggregatedRoofSurfaces = getAggregatedRoofs(roofSurfaces);
@@ -400,10 +414,10 @@ public class ExportAsCityGML {
                         .getAsDouble();
                 double height = max - min;
                 maxBuildingHeight = Math.max(maxBuildingHeight, height);
-                System.out.println(solid);
+                System.err.println(solid);
                 // building.setLod2Solid(convert(solid));
                 convert(building, solid);
-                System.err.println(building.getLod2Solid());
+                // System.err.println(building.getLod2Solid());
                 // ((Solid)
                 // building.getLod2Solid().getObject()).getExterior().getObject().accept(visitor);
                 // Envelope envelope = getEnvelope(union.envelope(), min, max);

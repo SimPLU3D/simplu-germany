@@ -10,6 +10,7 @@ import org.locationtech.jts.geom.GeometryFactory;
 
 import fr.ign.cogit.geoxygene.api.spatial.geomroot.IGeometry;
 import fr.ign.cogit.geoxygene.util.conversion.AdapterFactory;
+import fr.ign.cogit.geoxygene.util.conversion.JtsGeOxygene;
 import fr.ign.cogit.simplu3d.model.BasicPropertyUnit;
 import fr.ign.cogit.simplu3d.model.CadastralParcel;
 import fr.ign.cogit.simplu3d.model.ParcelBoundary;
@@ -32,6 +33,7 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 
 	private double roofAngle;
 	private double heightThreshold = 2.3; // federal German rule
+	private double tolerance = 0.1;
 
 	/**
 	 * 
@@ -51,8 +53,6 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 		this.windows = windows;
 		this.roofAngle = roofAngle;
 	}
-
-	Geometry surface = null;
 
 	/**
 	 * Ce constructeur initialise les géométries curveLimiteFondParcel,
@@ -81,8 +81,6 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 				}
 			}
 		}
-		GeometryFactory gf = new GeometryFactory();
-		this.surface = AdapterFactory.toGeometry(gf, bPU.getGeom());
 	}
 
 	/**
@@ -102,8 +100,10 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 			try {
 				Geometry parcelGeometry = AdapterFactory.toGeometry(new GeometryFactory(), currentParcel.getGeom());
 				for (O cuboid : lO) {
-					if (parcelGeometry.contains(cuboid.toGeometry().getCentroid())) {
-						if (!parcelGeometry.contains(cuboid.toGeometry())) {
+					// get the geometry of the building and reduce it a bit for robustness
+					Geometry geom = cuboid.toGeometry().buffer(-tolerance);
+					if (parcelGeometry.contains(geom.getCentroid())) {
+						if (!parcelGeometry.contains(geom)) {
 							return false;
 						}
 					}
@@ -113,19 +113,17 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 			}
 		}
 		for (O cuboid : lO) {
-			// FIXME We might have multiple windows for watch for it
-			if (!windows.stream().map(w -> w.geometry).anyMatch(w -> w.contains(cuboid.toGeometry()))) {
+			// get the geometry of the building and reduce it a bit for robustness
+			Geometry geom = cuboid.toGeometry().buffer(-tolerance);
+			if (!windows.stream().map(w -> w.geometry).anyMatch(w -> w.contains(geom))) {
 				return false;
 			}
-			// if (!windows.contains(cuboid.toGeometry())) {
-			// return false;
-			// }
 		}
-		// Check maximalFloorAreaRatio
+		// Check maximalFloorAreaRatio (FSI)
 		if (!respectMaximalFloorAreaRatio(c, m)) {
 			return false;
 		}
-		// On a réussi tous les tests, on renvoie vrai
+		// All rules have been verified
 		return true;
 	}
 
@@ -193,10 +191,15 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	}
 
 	private boolean respectMaximalFloorAreaRatioForParcel(List<AbstractSimpleBuilding> buildings, double area, double maximalFloorAreaRatio) {
-		SDPCalc computation = new SDPCalc(2.5);
-		double totalRoofSurface = buildings.stream().mapToDouble(b->roofSurface(b, windows.stream().filter(w->w.geometry.contains(b.toGeometry())).findAny().get().roofType)).sum();
-		return (computation.process(buildings) + totalRoofSurface) / area <= maximalFloorAreaRatio;
+		return computeFSIForParcel(buildings,area) <= maximalFloorAreaRatio;
 	}
+	public double computeFSIForParcel(List<AbstractSimpleBuilding> buildings, double area) {
+		if (buildings.isEmpty()) return 0;
+		SDPCalc computation = new SDPCalc(2.5);
+		double totalRoofSurface = buildings.stream().mapToDouble(b->roofSurface(b, windows.stream().filter(w->w.geometry.contains(b.toGeometry().getCentroid())).findAny().get().roofType)).sum();
+		return (computation.process(buildings) + totalRoofSurface) / area;
+	}
+
 	private double roofSurface(AbstractSimpleBuilding building, String roofType) {
 		switch (roofType) {
 			case "FD":

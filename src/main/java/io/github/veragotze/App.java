@@ -15,6 +15,7 @@ import org.locationtech.jts.geom.GeometryFactory;
 import fr.ign.cogit.geoxygene.api.feature.IFeature;
 import fr.ign.cogit.geoxygene.api.feature.IFeatureCollection;
 import fr.ign.cogit.geoxygene.api.spatial.geomroot.IGeometry;
+import fr.ign.cogit.geoxygene.util.algo.JtsAlgorithms;
 import fr.ign.cogit.geoxygene.util.attribute.AttributeManager;
 import fr.ign.cogit.geoxygene.util.conversion.AdapterFactory;
 import fr.ign.cogit.geoxygene.util.conversion.ShapefileWriter;
@@ -67,13 +68,14 @@ public class App {
                 System.out.println("PARCEL " + p.getCode().substring(p.getCode().length()-3) + " with FSI = " + fsis);
             }
         }
+        propertyUnit.setGeom(JtsAlgorithms.union(propertyUnit.getCadastralParcels().stream().map(p->p.getGeom()).toList()));
         List<Window<Geometry>> windows = new ArrayList<>();
         for (IFeature fenster : fensters) {
             Geometry fensterGeom = AdapterFactory.toGeometry(new GeometryFactory(), fenster.getGeom());
             int fensterFloors = Integer.parseInt(fenster.getAttribute("GESCH").toString());
             double windowMinHeight = fensterFloors * 2.5;
             double windowMaxHeight = fensterFloors * 3.5;
-            windows.add(new Window<>(fensterGeom, windowMinHeight, windowMaxHeight, fenster.getAttribute("DACHFORM").toString()));
+            windows.add(new Window<>(fensterGeom, windowMinHeight, windowMaxHeight, fenster.getAttribute("DACHFORM").toString(), fenster.getAttribute("BAUWEISE").toString()));
         }
         String fileName = "building_parameters.json";
         String folderName = App.class.getClassLoader().getResource("scenario/").getPath();
@@ -90,24 +92,24 @@ public class App {
         try {
             List<Window<IGeometry>> windows2 = windows.stream().map(w -> {
                 try {
-                    return new Window<IGeometry>(AdapterFactory.toGM_Object(w.geometry), w.minHeight, w.maxHeight, w.roofType);
+                    return new Window<IGeometry>(AdapterFactory.toGM_Object(w.geometry), w.minHeight, w.maxHeight, w.roofType, w.buildingStyle);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
                 return null;
             }).collect(Collectors.toList());
             // add visitors
-            List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>> visitors = Arrays.asList(new SimpleVisitor(System.out,propertyUnit.getCadastralParcels()));
+            List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>> visitors = Arrays.asList(new SimpleVisitor(System.out,propertyUnit.getCadastralParcels(),pred));
             GraphConfiguration<Cuboid> cc = oCB.process(propertyUnit, windows2, p, env, pred, visitors);
             // 4 - Writting the output
             ExportAsFeatureCollection exporter = new ExportAsFeatureCollection(cc);
             IFeatureCollection<? extends IFeature> exported = exporter.getFeatureCollection();
             for (CadastralParcel parcel : propertyUnit.getCadastralParcels()) {
-                Collection<? extends IFeature> buildings = exported.select(parcel.getGeom());
+                Collection<? extends IFeature> buildings = exported.select(parcel.getGeom().buffer(-0.5));
                 buildings.forEach(b -> {
                     AttributeManager.addAttribute(b, "parcelId", parcel.getCode(), "String");
                     AttributeManager.addAttribute(b, "windowId",
-                            fensters.stream().filter(f -> f.getGeom().contains(b.getGeom())).findAny().get()
+                            fensters.stream().filter(f -> f.getGeom().contains(b.getGeom().centroid().toGM_Point())).findAny().get()
                                     .getAttribute("OBJECTID").toString(),
                             "String");
                 });
