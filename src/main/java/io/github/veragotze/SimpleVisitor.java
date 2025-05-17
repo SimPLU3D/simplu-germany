@@ -6,8 +6,6 @@ import java.util.Calendar;
 import java.util.Formatter;
 import java.util.List;
 
-import org.checkerframework.checker.units.qual.C;
-import org.geolatte.geom.M;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 
@@ -15,12 +13,9 @@ import fr.ign.cogit.geoxygene.util.conversion.AdapterFactory;
 import fr.ign.cogit.simplu3d.model.CadastralParcel;
 import fr.ign.cogit.simplu3d.rjmcmc.cuboid.geometry.impl.AbstractSimpleBuilding;
 import fr.ign.cogit.simplu3d.rjmcmc.cuboid.geometry.impl.Cuboid;
-import fr.ign.cogit.simplu3d.util.merge.SDPCalc;
 import fr.ign.mpp.configuration.BirthDeathModification;
 import fr.ign.mpp.configuration.GraphConfiguration;
 import fr.ign.mpp.configuration.ListConfiguration;
-import fr.ign.rjmcmc.configuration.Configuration;
-import fr.ign.rjmcmc.configuration.Modification;
 import fr.ign.rjmcmc.sampler.Sampler;
 import fr.ign.simulatedannealing.temperature.Temperature;
 import fr.ign.simulatedannealing.visitor.Visitor;
@@ -57,7 +52,7 @@ public class SimpleVisitor implements Visitor<GraphConfiguration<Cuboid>, BirthD
         this.formatter = new Formatter(this.stream);
         this.formatter.format(this.formatString, "Iteration");
         if (config instanceof ListConfiguration) {
-            this.formatter.format(this.formatString, "Objects");
+            this.formatter.format(this.formatStringSmall, "Obj");
         }
         parcels.stream().forEach(p -> {
             String id = p.getCode();
@@ -77,10 +72,7 @@ public class SimpleVisitor implements Visitor<GraphConfiguration<Cuboid>, BirthD
         ++iter;
         if ((dump > 0) && (iter % dump == 0)) {
             this.formatter.format(this.formatInt, Integer.valueOf(iter));
-            if (config instanceof ListConfiguration) {
-                ListConfiguration<?, ?, ?> c = (ListConfiguration<?, ?, ?>) config;
-                this.formatter.format(this.formatInt, Integer.valueOf(c.size()));
-            }
+            this.formatter.format(this.formatStringSmall, Integer.valueOf(config.size()));
             List<Cuboid> lCuboid = new ArrayList<>(
                     config.getGraph().vertexSet().stream().map(v -> v.getValue()).toList());
             parcels.stream().forEach(p -> {

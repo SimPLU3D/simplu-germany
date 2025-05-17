@@ -12,7 +12,6 @@ import org.apache.commons.math3.random.MersenneTwister;
 import org.apache.commons.math3.random.RandomGenerator;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
-import org.locationtech.jts.geom.GeometryFactory;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Polygon;
 import org.locationtech.jts.noding.NodedSegmentString;
@@ -22,7 +21,6 @@ import org.locationtech.jts.operation.linemerge.LineMerger;
 import fr.ign.cogit.geoxygene.api.spatial.coordgeom.IEnvelope;
 import fr.ign.cogit.geoxygene.api.spatial.coordgeom.IPolygon;
 import fr.ign.cogit.geoxygene.api.spatial.geomroot.IGeometry;
-import fr.ign.cogit.geoxygene.util.conversion.AdapterFactory;
 import fr.ign.cogit.geoxygene.util.conversion.JtsGeOxygene;
 import fr.ign.cogit.simplu3d.model.BasicPropertyUnit;
 import fr.ign.cogit.simplu3d.model.CadastralParcel;
@@ -34,6 +32,9 @@ import fr.ign.cogit.simplu3d.rjmcmc.cuboid.transformation.ChangeLength;
 import fr.ign.cogit.simplu3d.rjmcmc.cuboid.transformation.ChangeWidth;
 import fr.ign.cogit.simplu3d.rjmcmc.cuboid.transformation.MoveCuboid;
 import fr.ign.cogit.simplu3d.rjmcmc.cuboid.transformation.RotateCuboid;
+import fr.ign.cogit.simplu3d.rjmcmc.generic.energy.DifferenceVolumeUnaryEnergy;
+import fr.ign.cogit.simplu3d.rjmcmc.generic.energy.IntersectionVolumeBinaryEnergy;
+import fr.ign.cogit.simplu3d.rjmcmc.generic.energy.VolumeUnaryEnergy;
 import fr.ign.cogit.simplu3d.rjmcmc.generic.sampler.GreenSamplerBlockTemperature;
 import fr.ign.cogit.simplu3d.rjmcmc.generic.visitor.CountVisitor;
 import fr.ign.cogit.simplu3d.rjmcmc.generic.visitor.PrepareVisitors;
@@ -49,9 +50,15 @@ import fr.ign.random.Random;
 import fr.ign.rjmcmc.acceptance.MetropolisAcceptance;
 import fr.ign.rjmcmc.configuration.ConfigurationModificationPredicate;
 import fr.ign.rjmcmc.distribution.PoissonDistribution;
+import fr.ign.rjmcmc.energy.BinaryEnergy;
+import fr.ign.rjmcmc.energy.ConstantEnergy;
+import fr.ign.rjmcmc.energy.MinusUnaryEnergy;
+import fr.ign.rjmcmc.energy.MultipliesBinaryEnergy;
+import fr.ign.rjmcmc.energy.MultipliesUnaryEnergy;
+import fr.ign.rjmcmc.energy.PlusUnaryEnergy;
+import fr.ign.rjmcmc.energy.UnaryEnergy;
 import fr.ign.rjmcmc.kernel.Kernel;
 import fr.ign.rjmcmc.sampler.Sampler;
-import fr.ign.simulatedannealing.ParallelTempering;
 import fr.ign.simulatedannealing.SimulatedAnnealing;
 import fr.ign.simulatedannealing.endtest.EndTest;
 import fr.ign.simulatedannealing.schedule.Schedule;
@@ -127,32 +134,32 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
     }
 
     @SuppressWarnings("unchecked")
-    static <U extends Cuboid> ClassBuilderPair<U> createClass(String fullName,
-            MultiObjectUniformBirth<Cuboid> objectSampler, RandomGenerator rng, double area, double minX, double minY,
+    static <U extends Cuboid> ClassBuilderPair<U> createWindowCuboidClass(String fullName,
+            MultiObjectUniformBirth<Cuboid> objectSampler, RandomGenerator rng, Polygon window, double area, double minX, double minY,
             double minLength, double minWidth, double minHeight, double maxX, double maxY, double maxLength, double maxWidth, double maxHeight)
             throws NotFoundException, CannotCompileException, InstantiationException, IllegalAccessException,
             IllegalArgumentException, InvocationTargetException {
         ClassPool pool = ClassPool.getDefault();
         // Create the class.
         CtClass subClass = pool.makeClass(fullName);
-        final CtClass superClass = pool.get(Cuboid.class.getName());
+        final CtClass superClass = pool.get(WindowCuboid.class.getName());
         subClass.setSuperclass(superClass);
         subClass.setModifiers(Modifier.PUBLIC);
         // Add a constructor which will call super( ... );
         CtClass[] params = new CtClass[] { CtClass.doubleType, CtClass.doubleType, CtClass.doubleType,
-                CtClass.doubleType, CtClass.doubleType, CtClass.doubleType };
+                CtClass.doubleType, CtClass.doubleType, CtClass.doubleType, pool.get(Geometry.class.getName()) };
         final CtConstructor ctor = CtNewConstructor.make(params, null, CtNewConstructor.PASS_PARAMS, null, null,
                 subClass);
         subClass.addConstructor(ctor);
         Class<U> clazz = (Class<U>) subClass.toClass(Optimizer.class);
         Constructor<U> constr = (Constructor<U>) clazz.getConstructors()[0];
-        U min = constr.newInstance(minX, minY, minLength, minWidth, minHeight, 0);
-        U max = constr.newInstance(maxX, maxY, maxLength, maxWidth, maxHeight, Math.PI);
+        U min = constr.newInstance(minX, minY, minLength, minWidth, minHeight, 0, window);
+        U max = constr.newInstance(maxX, maxY, maxLength, maxWidth, maxHeight, Math.PI, window);
         ObjectBuilder<Cuboid> builder = new ObjectBuilder<Cuboid>() {
             @Override
             public Cuboid build(double[] c) {
                 try {
-                    return (Cuboid) constr.newInstance(c[0], c[1], c[2], c[3], c[4], c[5]);
+                    return (Cuboid) constr.newInstance(c[0], c[1], c[2], c[3], c[4], c[5], window);
                 } catch (Exception e) {
                     e.printStackTrace();
                     return null;
@@ -327,10 +334,10 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
                 ClassBuilderPair<? extends Cuboid> classBuilderPair = null;
                 double subWindowArea = intersection.polygon.area();
                 try {
+                    Polygon subWindowPolygon = (Polygon) JtsGeOxygene.makeJtsGeom(intersection.polygon);
                     switch (window.buildingStyle) {
                         case "g":
                             Polygon parcelPolygon = (Polygon) JtsGeOxygene.makeJtsGeom(intersection.parcel.getGeom());
-                            Polygon subWindowPolygon = (Polygon) JtsGeOxygene.makeJtsGeom(intersection.polygon);
                             SnappingNoder noder = new SnappingNoder(0.5);
                             List<NodedSegmentString> segs = SegmentStringUtil.extractNodedSegmentStrings(parcelPolygon);
                             segs.addAll(SegmentStringUtil.extractNodedSegmentStrings(subWindowPolygon));
@@ -364,8 +371,8 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
                             System.err.println("REVERTING TO STANDARD!!! " + merged.size());
                         default:
                             System.err.println(name + " " + intersection.parcel.getCode() + " " + subWindowArea + " " + window.minHeight + " " + window.maxHeight);
-                            classBuilderPair = createClass(name, objectSampler,
-                                    rng, subWindowArea, env.minX(), env.minY(), minlen, minwid,
+                            classBuilderPair = createWindowCuboidClass(name, objectSampler,
+                                    rng, subWindowPolygon, subWindowArea, env.minX(), env.minY(), minlen, minwid,
                                     window.minHeight, env.maxX(), env.maxY(), maxlen, maxwid, window.maxHeight);
                             break;
                     }
@@ -470,5 +477,49 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
     }
 
     protected CountVisitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> countV = null;
+
+    @Override
+	public GraphConfiguration<Cuboid> create_configuration(SimpluParameters p, Geometry geom, BasicPropertyUnit bpu) {
+		// Énergie constante : à la création d'un nouvel objet
+		ConstantEnergy<Cuboid, Cuboid> energyCreation = new ConstantEnergy<Cuboid, Cuboid>(p.getDouble("energy"));
+		// Énergie constante : pondération de l'intersection
+		ConstantEnergy<Cuboid, Cuboid> ponderationVolume = new ConstantEnergy<Cuboid, Cuboid>(
+				p.getDouble("ponderation_volume"));
+		// Énergie unaire : aire dans la parcelle
+		UnaryEnergy<Cuboid> energyVolume = new VolumeUnaryEnergy<Cuboid>();
+		// Multiplication de l'énergie d'intersection et de l'aire
+		UnaryEnergy<Cuboid> energyVolumePondere = new MultipliesUnaryEnergy<Cuboid>(ponderationVolume, energyVolume);
+
+		// On retire de l'énergie de création, l'énergie de l'aire
+		UnaryEnergy<Cuboid> u3 = new MinusUnaryEnergy<Cuboid>(energyCreation, energyVolumePondere);
+
+		double ponderationExt = p.getDouble("ponderation_difference_ext");
+
+		UnaryEnergy<Cuboid> unaryEnergy;
+
+		if (ponderationExt != 0) {
+			// Énergie constante : pondération de la différence
+			ConstantEnergy<Cuboid, Cuboid> ponderationDifference = new ConstantEnergy<Cuboid, Cuboid>(
+					p.getDouble("ponderation_difference_ext"));
+			// On ajoute l'énergie de différence : la zone en dehors de la parcelle
+			UnaryEnergy<Cuboid> u4 = new DifferenceVolumeUnaryEnergy<Cuboid>(geom);
+			UnaryEnergy<Cuboid> u5 = new MultipliesUnaryEnergy<Cuboid>(ponderationDifference, u4);
+			unaryEnergy = new PlusUnaryEnergy<Cuboid>(u3, u5);
+		} else {
+			unaryEnergy = u3;
+		}
+        ConstantEnergy<Cuboid, Cuboid> alignmentWeight = new ConstantEnergy<Cuboid, Cuboid>(p.getDouble("ponderation_alignment"));
+        UnaryEnergy<Cuboid> u6 = new AlignmentEnergy<Cuboid>();
+        UnaryEnergy<Cuboid> u7 = new MultipliesUnaryEnergy<Cuboid>(alignmentWeight, u6);
+        unaryEnergy = new PlusUnaryEnergy<Cuboid>(unaryEnergy, u7);
+
+		// Énergie binaire : intersection entre deux rectangles
+		ConstantEnergy<Cuboid, Cuboid> c3 = new ConstantEnergy<Cuboid, Cuboid>(p.getDouble("ponderation_volume_inter"));
+		BinaryEnergy<Cuboid, Cuboid> b1 = new IntersectionVolumeBinaryEnergy<Cuboid>();
+		BinaryEnergy<Cuboid, Cuboid> binaryEnergy = new MultipliesBinaryEnergy<Cuboid, Cuboid>(c3, b1);
+		// empty initial configuration*/
+		GraphConfiguration<Cuboid> conf = new GraphConfiguration<>(unaryEnergy, binaryEnergy);
+		return conf;
+	}
 
 }

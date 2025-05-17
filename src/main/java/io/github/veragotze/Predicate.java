@@ -10,7 +10,6 @@ import org.locationtech.jts.geom.GeometryFactory;
 
 import fr.ign.cogit.geoxygene.api.spatial.geomroot.IGeometry;
 import fr.ign.cogit.geoxygene.util.conversion.AdapterFactory;
-import fr.ign.cogit.geoxygene.util.conversion.JtsGeOxygene;
 import fr.ign.cogit.simplu3d.model.BasicPropertyUnit;
 import fr.ign.cogit.simplu3d.model.CadastralParcel;
 import fr.ign.cogit.simplu3d.model.ParcelBoundary;

@@ -32,9 +32,7 @@ import org.citygml4j.xml.writer.CityGMLChunkWriter;
 import org.citygml4j.xml.writer.CityGMLOutputFactory;
 import org.citygml4j.xml.writer.CityGMLWriteException;
 import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.jts.geom.CoordinateSequence;
 import org.locationtech.jts.geom.LineSegment;
-import org.locationtech.jts.geom.PrecisionModel;
 import org.twak.camp.Corner;
 import org.twak.camp.Edge;
 import org.twak.camp.Machine;
@@ -78,8 +76,6 @@ import fr.ign.cogit.geoxygene.spatial.geomaggr.GM_MultiSurface;
 import fr.ign.cogit.geoxygene.spatial.geomprim.GM_Ring;
 import fr.ign.cogit.geoxygene.spatial.geomprim.GM_Solid;
 import fr.ign.cogit.geoxygene.util.algo.JtsAlgorithms;
-import fr.ign.cogit.geoxygene.util.conversion.AdapterFactory;
-import fr.ign.cogit.geoxygene.util.conversion.JtsGeOxygene;
 import fr.ign.cogit.geoxygene.util.conversion.ShapefileReader;
 
 public class ExportAsCityGML {
