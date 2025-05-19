@@ -11,6 +11,7 @@ import java.util.stream.Stream;
 import org.apache.commons.math3.random.MersenneTwister;
 import org.apache.commons.math3.random.RandomGenerator;
 import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.Envelope;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.Polygon;
@@ -51,6 +52,7 @@ import fr.ign.rjmcmc.acceptance.MetropolisAcceptance;
 import fr.ign.rjmcmc.configuration.ConfigurationModificationPredicate;
 import fr.ign.rjmcmc.distribution.PoissonDistribution;
 import fr.ign.rjmcmc.energy.BinaryEnergy;
+import fr.ign.rjmcmc.energy.CollectionEnergy;
 import fr.ign.rjmcmc.energy.ConstantEnergy;
 import fr.ign.rjmcmc.energy.MinusUnaryEnergy;
 import fr.ign.rjmcmc.energy.MultipliesBinaryEnergy;
@@ -93,7 +95,7 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
      *                               functions)
      * @return a set of cuboid as a graph
      */
-    public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, List<Window<IGeometry>> windows,
+    public GraphConfiguration<Cuboid> process(BasicPropertyUnit bpu, List<Window<Geometry>> windows,
             SimpluParameters p,
             Environnement env,
             ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred,
@@ -106,7 +108,7 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 
         GraphConfiguration<Cuboid> conf = null;
         try {
-            conf = create_configuration(p, JtsGeOxygene.makeJtsGeom(bpu.getGeom()), bpu);
+            conf = create_configuration(p, JtsGeOxygene.makeJtsGeom(bpu.getGeom()), windows);
             // TODO Add a unary energy to penalise the configurations that are askew with regards to borders?
         } catch (Exception e) {
             e.printStackTrace();
@@ -303,7 +305,7 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
     public Sampler<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> create_sampler(RandomGenerator rng,
             SimpluParameters p, BasicPropertyUnit bpU,
             ConfigurationModificationPredicate<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred,
-            List<Window<IGeometry>> windows) {
+            List<Window<Geometry>> windows) {
         // Getting minimal and maximal dimension from the parameter file
         double minlen = Double.isNaN(this.minLengthBox) ? p.getDouble("minlen") : this.minLengthBox;
         double maxlen = Double.isNaN(this.maxLengthBox) ? p.getDouble("maxlen") : this.maxLengthBox;
@@ -316,25 +318,29 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
         Map<Class<? extends Cuboid>, ObjectBuilder<Cuboid>> builders = new HashMap<>();
         Map<Class<? extends Cuboid>, Double> windowArea = new HashMap<>();
         int windowIndex = 0;
-        for (Window<IGeometry> window : windows) {
-            record ParcelWindowIntersection(CadastralParcel parcel, IPolygon polygon) {
+        for (Window<Geometry> window : windows) {
+            record ParcelWindowIntersection(CadastralParcel parcel, Polygon polygon) {
             }
             List<ParcelWindowIntersection> intersections = bpU.getCadastralParcels().stream().flatMap(parcel -> {
-                if (parcel.getGeom().intersects(window.geometry))
-                    return Stream.of(new ParcelWindowIntersection(parcel,
-                            (IPolygon) parcel.getGeom().intersection(window.geometry)));
+                try {
+                    Geometry parcelGeometry = JtsGeOxygene.makeJtsGeom(parcel.getGeom());
+                    if (parcelGeometry.intersects(window.geometry))
+                    return Stream.of(new ParcelWindowIntersection(parcel, (Polygon) parcelGeometry.intersection(window.geometry)));
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
                 return Stream.empty();
             }).toList();
             for (ParcelWindowIntersection intersection : intersections) {
                 // System.err
                 //         .println("Create window " + windowIndex + " with " + window.minHeight + " - " + window.maxHeight
                 //                 + " type " + window.buildingStyle);
-                IEnvelope env = intersection.polygon.envelope();
+                Envelope env = intersection.polygon.getEnvelopeInternal();
                 String name = "io.github.veragotze.B" + windowIndex;
                 ClassBuilderPair<? extends Cuboid> classBuilderPair = null;
-                double subWindowArea = intersection.polygon.area();
+                double subWindowArea = intersection.polygon.getArea();
                 try {
-                    Polygon subWindowPolygon = (Polygon) JtsGeOxygene.makeJtsGeom(intersection.polygon);
+                    Polygon subWindowPolygon = intersection.polygon;
                     switch (window.buildingStyle) {
                         case "g":
                             Polygon parcelPolygon = (Polygon) JtsGeOxygene.makeJtsGeom(intersection.parcel.getGeom());
@@ -353,11 +359,11 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
                                 LineString line = (LineString) merged.get(0);
                                 System.err.println(name + " " + intersection.parcel.getCode() + " " + subWindowArea + " " + window.minHeight + " " + window.maxHeight + " " + line);
                                 System.err.println(intersection.polygon);
-                                System.err.println(referenceLines.getFactory().createPoint(new Coordinate(env.minX(), env.minY())));
-                                System.err.println(referenceLines.getFactory().createPoint(new Coordinate(env.maxX(), env.maxY())));
+                                System.err.println(referenceLines.getFactory().createPoint(new Coordinate(env.getMinX(), env.getMinY())));
+                                System.err.println(referenceLines.getFactory().createPoint(new Coordinate(env.getMaxX(), env.getMaxY())));
                                 classBuilderPair = createClassOneSidedAttached(name, objectSampler, rng, subWindowArea, line, 
-                                env.minX(), env.minY(), minwid, window.minHeight, 
-                                env.maxX(), env.maxY(), maxwid, window.maxHeight);
+                                env.getMinX(), env.getMinY(), minwid, window.minHeight, 
+                                env.getMaxX(), env.getMaxY(), maxwid, window.maxHeight);
                                 break;
                             } else if (merged.size() == 2) {
                                 LineString line1 = (LineString) merged.get(0);
@@ -372,8 +378,8 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
                         default:
                             System.err.println(name + " " + intersection.parcel.getCode() + " " + subWindowArea + " " + window.minHeight + " " + window.maxHeight);
                             classBuilderPair = createWindowCuboidClass(name, objectSampler,
-                                    rng, subWindowPolygon, subWindowArea, env.minX(), env.minY(), minlen, minwid,
-                                    window.minHeight, env.maxX(), env.maxY(), maxlen, maxwid, window.maxHeight);
+                                    rng, subWindowPolygon, subWindowArea, env.getMinX(), env.getMinY(), minlen, minwid,
+                                    window.minHeight, env.getMaxX(), env.getMaxY(), maxlen, maxwid, window.maxHeight);
                             break;
                     }
                     classes.add(classBuilderPair.theClass);
@@ -478,8 +484,7 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 
     protected CountVisitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> countV = null;
 
-    @Override
-	public GraphConfiguration<Cuboid> create_configuration(SimpluParameters p, Geometry geom, BasicPropertyUnit bpu) {
+	public GraphConfiguration<Cuboid> create_configuration(SimpluParameters p, Geometry geom, List<Window<Geometry>> windows) {
 		// Énergie constante : à la création d'un nouvel objet
 		ConstantEnergy<Cuboid, Cuboid> energyCreation = new ConstantEnergy<Cuboid, Cuboid>(p.getDouble("energy"));
 		// Énergie constante : pondération de l'intersection
@@ -518,7 +523,8 @@ public class Optimizer extends BasicCuboidOptimizer<Cuboid> {
 		BinaryEnergy<Cuboid, Cuboid> b1 = new IntersectionVolumeBinaryEnergy<Cuboid>();
 		BinaryEnergy<Cuboid, Cuboid> binaryEnergy = new MultipliesBinaryEnergy<Cuboid, Cuboid>(c3, b1);
 		// empty initial configuration*/
-		GraphConfiguration<Cuboid> conf = new GraphConfiguration<>(unaryEnergy, binaryEnergy);
+        CollectionEnergy<Cuboid> globalEnergy = new BuildingDistanceEnergy(windows);
+		GraphConfiguration<Cuboid> conf = new GraphConfiguration<>(unaryEnergy, binaryEnergy, globalEnergy);
 		return conf;
 	}
 

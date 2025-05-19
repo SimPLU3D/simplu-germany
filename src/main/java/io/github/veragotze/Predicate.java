@@ -94,11 +94,11 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	 */
 	@Override
 	public boolean check(C c, M m) {
-		List<O> lO = m.getBirth();
+		List<O> newCuboids = m.getBirth();
 		for (CadastralParcel currentParcel : currentBPU.getCadastralParcels()) {
 			try {
 				Geometry parcelGeometry = AdapterFactory.toGeometry(new GeometryFactory(), currentParcel.getGeom());
-				for (O cuboid : lO) {
+				for (O cuboid : newCuboids) {
 					// get the geometry of the building and reduce it a bit for robustness
 					Geometry geom = cuboid.toGeometry().buffer(-tolerance);
 					if (parcelGeometry.contains(geom.getCentroid())) {
@@ -111,7 +111,7 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 				e.printStackTrace();
 			}
 		}
-		for (O cuboid : lO) {
+		for (O cuboid : newCuboids) {
 			// get the geometry of the building and reduce it a bit for robustness
 			Geometry geom = cuboid.toGeometry().buffer(-tolerance);
 			if (!windows.stream().map(w -> w.geometry).anyMatch(w -> w.contains(geom))) {
@@ -134,42 +134,12 @@ public class Predicate<O extends ISimPLU3DPrimitive, C extends AbstractGraphConf
 	 * @return
 	 */
 	private boolean respectMaximalFloorAreaRatio(C c, M m) {
-		// On fait la liste de tous les objets après modification
-		List<O> lCuboid = new ArrayList<>();
-
-		// On ajoute tous les nouveaux objets
+		// we the current objects from the configuration
+		List<O> lCuboid = new ArrayList<>(c.getGraph().vertexSet().stream().map(v->v.getValue()).toList());
+		// add the new objects
 		lCuboid.addAll(m.getBirth());
-
-		// On récupère la boîte (si elle existe) que l'on supprime lors de la
-		// modification
-		O cuboidDead = null;
-
-		if (!m.getDeath().isEmpty()) {
-			cuboidDead = m.getDeath().get(0);
-		}
-
-		// On parcourt les objets existants moins celui qu'on supprime
-		Iterator<O> iTBat = c.iterator();
-		while (iTBat.hasNext()) {
-
-			O cuboidTemp = iTBat.next();
-
-			// Si c'est une boîte qui est amenée à disparaître après
-			// modification,
-			// elle n'entre pas en jeu dans les vérifications
-			if (cuboidTemp == cuboidDead) {
-				continue;
-			}
-
-			lCuboid.add(cuboidTemp);
-
-		}
-
-		// C'est vide la règle est respectée
-		if (lCuboid.isEmpty()) {
-			return true;
-		}
-
+		// remove the objects to be removed
+		lCuboid.removeAll(m.getDeath());
 		for (CadastralParcel currentParcel : currentBPU.getCadastralParcels()) {
 			try {
 				Geometry parcelGeometry = AdapterFactory.toGeometry(new GeometryFactory(), currentParcel.getGeom());

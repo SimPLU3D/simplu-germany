@@ -14,7 +14,6 @@ import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.geom.GeometryFactory;
 import fr.ign.cogit.geoxygene.api.feature.IFeature;
 import fr.ign.cogit.geoxygene.api.feature.IFeatureCollection;
-import fr.ign.cogit.geoxygene.api.spatial.geomroot.IGeometry;
 import fr.ign.cogit.geoxygene.util.algo.JtsAlgorithms;
 import fr.ign.cogit.geoxygene.util.attribute.AttributeManager;
 import fr.ign.cogit.geoxygene.util.conversion.AdapterFactory;
@@ -37,17 +36,21 @@ import fr.ign.simulatedannealing.visitor.Visitor;
  */
 public class App {
     public static void main(String[] args) throws Exception {
-        // Step 0 ; Defining an output existing folder
-        String outputFolder = "./output_roof/";
+        // Step 0 ; Defining an input folder and an output folder
+        String inputFolder = "munich_full/";
+        String parametersFile = "building_parameters.json";
+        String outputFolder = "./output/";
+        String outputFileName = "out.shp";
         double roofAngleInDegrees = 40.0;
         double roofAngle = roofAngleInDegrees * Math.PI / 180.0;
         // Step 1 : Creating the geographic environnement using the repository that
         // contains the data
         // Load default environment (data are in resource directory)
         AttribNames.setATT_CODE_PARC("OID_1");
-        File folder = new File(App.class.getClassLoader().getResource("munich_full/").getPath());
+        File folder = new File(App.class.getClassLoader().getResource(inputFolder).getPath());
         Environnement env = Loader.load(folder, null);
         IFeatureCollection<IFeature> fensters = Loader.readShapefile(new File(folder, "fenster.shp"));
+        System.err.println(fensters.size() + " Fensters found");
         Map<String, Double> plan2FSI = new HashMap<>();
         Loader.readShapefile(new File(folder, "plan.shp")).stream().forEach(f -> plan2FSI
                 .put(f.getAttribute("NR_PLAN").toString()+f.getAttribute("TEILGEBIET").toString(), Double.parseDouble(f.getAttribute("FSI").toString())));
@@ -77,9 +80,9 @@ public class App {
             double windowMaxHeight = fensterFloors * 3.5;
             windows.add(new Window<>(fensterGeom, windowMinHeight, windowMaxHeight, fenster.getAttribute("DACHFORM").toString(), fenster.getAttribute("BAUWEISE").toString()));
         }
-        String fileName = "building_parameters.json";
-        String folderName = App.class.getClassLoader().getResource("scenario/").getPath();
-        SimpluParameters p = new SimpluParametersJSON(new File(folderName + fileName));
+        String file = App.class.getClassLoader().getResource("scenario/"+parametersFile).getFile();
+        SimpluParameters p = new SimpluParametersJSON(new File(file));
+        // SimpluParameters p = new SimpluGermanyParameters("scenario/building_parameters.json");
         // Instanciation of a predicate class
         Predicate<Cuboid, GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>> pred = new Predicate<>(
                 propertyUnit, parcel2FSI, windows, roofAngle);
@@ -88,19 +91,10 @@ public class App {
         Optimizer oCB = new Optimizer();
         // Loading the parameters for the building shape generation
         // Run of the optimisation on a parcel with the predicate
-        System.out.println("START");
         try {
-            List<Window<IGeometry>> windows2 = windows.stream().map(w -> {
-                try {
-                    return new Window<IGeometry>(AdapterFactory.toGM_Object(w.geometry), w.minHeight, w.maxHeight, w.roofType, w.buildingStyle);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-                return null;
-            }).collect(Collectors.toList());
             // add visitors
             List<Visitor<GraphConfiguration<Cuboid>, BirthDeathModification<Cuboid>>> visitors = Arrays.asList(new SimpleVisitor(System.out,propertyUnit.getCadastralParcels(),pred));
-            GraphConfiguration<Cuboid> cc = oCB.process(propertyUnit, windows2, p, env, pred, visitors);
+            GraphConfiguration<Cuboid> cc = oCB.process(propertyUnit, windows, p, env, pred, visitors);
             // 4 - Writting the output
             ExportAsFeatureCollection exporter = new ExportAsFeatureCollection(cc);
             IFeatureCollection<? extends IFeature> exported = exporter.getFeatureCollection();
@@ -114,7 +108,7 @@ public class App {
                             "String");
                 });
             }
-            ShapefileWriter.write(exported, outputFolder + "out.shp", CRS.decode("EPSG:25832"));
+            ShapefileWriter.write(exported, outputFolder + (outputFolder.endsWith("/") ? "" : "/") + outputFileName, CRS.decode("EPSG:25832"));
 
         } catch (Exception e) {
             e.printStackTrace();

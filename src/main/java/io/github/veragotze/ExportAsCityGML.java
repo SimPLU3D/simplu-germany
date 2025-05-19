@@ -22,8 +22,11 @@ import org.citygml4j.core.model.construction.Height;
 import org.citygml4j.core.model.construction.HeightProperty;
 import org.citygml4j.core.model.construction.RoofSurface;
 import org.citygml4j.core.model.construction.WallSurface;
+import org.citygml4j.core.model.core.AbstractGenericAttribute;
+import org.citygml4j.core.model.core.AbstractGenericAttributeProperty;
 import org.citygml4j.core.model.core.AbstractSpaceBoundaryProperty;
 import org.citygml4j.core.model.core.AbstractThematicSurface;
+import org.citygml4j.core.model.generics.StringAttribute;
 import org.citygml4j.core.util.geometry.GeometryFactory;
 import org.citygml4j.xml.CityGMLContext;
 import org.citygml4j.xml.CityGMLContextException;
@@ -39,6 +42,7 @@ import org.twak.camp.Machine;
 import org.twak.camp.Skeleton;
 import org.twak.utils.collections.Loop;
 import org.twak.utils.collections.LoopL;
+import org.xmlobjects.gml.model.basictypes.Code;
 import org.xmlobjects.gml.model.feature.BoundingShape;
 import org.xmlobjects.gml.model.geometry.DirectPosition;
 import org.xmlobjects.gml.model.geometry.Envelope;
@@ -135,10 +139,8 @@ public class ExportAsCityGML {
     }
 
     private static boolean perpendicular(double a, double tolerance) {
-        // System.out.println("angle in " + a);
         // make sure the angle is between -PI and PI
         double angle = (a < -Math.PI) ? a + 2 * Math.PI : (a > Math.PI) ? a - 2 * Math.PI : a;
-        // System.out.println("angle norm " + angle);
         // perpendicular enough if angle is between PI/4 and 3PI/4
         return Math.abs(angle) > Math.PI / 2 - tolerance && Math.abs(angle) < Math.PI / 2 + tolerance;
     }
@@ -150,64 +152,56 @@ public class ExportAsCityGML {
         PlanEquation pe = new ApproximatedPlanEquation(points);
         Vecteur normal = pe.getNormale().getNormalised();
         if (normal.getZ() < 0) {
-            System.err.println("reverse roof");
-            System.err.println(surface);
+            // we reverse the orientation if the polygon faces down
             points = points.reverse();
         }
         double height = rExt.coord().get(0).getZ();
         List<Edge> lEExt = fromDPLToEdges(points);
         LineSegment segment = lineStringToLineSegment(edge);
         // determine wich edges are perpendicular to the longest edges
-        // TODO check if they are end edges too? (perpendicular to previous and next
-        // edge)
         IntStream.range(0, lEExt.size()).forEach(index -> {
             Edge e = lEExt.get(index);
-            Edge previous = lEExt.get((index == 0) ? lEExt.size()-1 : index -1);
-            Edge next = lEExt.get((index+1)%lEExt.size());
-            double angle = edgeToLineSegment(previous).angle() - edgeToLineSegment(next).angle();
-            boolean isEnd = angle > Math.PI - Math.PI/10 || angle < -Math.PI + Math.PI/10;
-            boolean isPerpendicularToLongestEdge = perpendicular(edgeToLineSegment(e).angle() - segment.angle(), Math.PI/4);
-            System.err.println(isPerpendicularToLongestEdge + " " + isEnd + " " + angle);
-            e.setAngle(isPerpendicularToLongestEdge /*&& isEnd*/ ? 0 : roofAngle);
+            // Edge previous = lEExt.get((index == 0) ? lEExt.size() - 1 : index - 1);
+            // Edge next = lEExt.get((index + 1) % lEExt.size());
+            // double angle = edgeToLineSegment(previous).angle() - edgeToLineSegment(next).angle();
+            // check if they are end edges too(perpendicular to previous and next edge): tested it and it's not better
+            // boolean isEnd = angle > Math.PI - Math.PI / 10 || angle < -Math.PI + Math.PI / 10;
+            boolean isPerpendicularToLongestEdge = perpendicular(edgeToLineSegment(e).angle() - segment.angle(),
+                    Math.PI / 4);
+            e.setAngle(isPerpendicularToLongestEdge /* && isEnd */ ? 0 : roofAngle);
         });
-        // lEExt.forEach(e->System.err.println("machineangle " + e.getAngle()));
         Loop<Edge> loop = new Loop<Edge>(lEExt);
         lEExt.forEach(e -> e.machine = new Machine(e.getAngle()));
         input.add(loop);
         Skeleton s = new Skeleton(input, true);
         s.skeleton();
         return s.output.faces.values().stream().flatMap(f -> {
-            System.err.println("face = " + f.pointCount() + " with height " + height);
+            // filter out empty polygons
             if (f.pointCount() > 0) {
-            IPolygon poly = new GM_Polygon();
-            for (Loop<Point3d> lP : f.points) {
-                IDirectPositionList dpl = convertLoopCorner(lP);
-                // System.err.println("dpl 1 =\n" + dpl);
-                // add height
-                dpl.stream().forEach(p -> p.setZ(p.getZ() + height));
-                // make sure the face is closed
-                dpl.add(dpl.get(0));
-                dpl.reverse();// ???
-                // System.err.println("dpl 2 =\n" + dpl);
-                if (poly.getExterior() == null) {
-                    poly.setExterior(new GM_Ring(new GM_LineString(dpl)));
-                } else {
-                    poly.addInterior(new GM_Ring(new GM_LineString(dpl)));
+                IPolygon poly = new GM_Polygon();
+                for (Loop<Point3d> lP : f.points) {
+                    IDirectPositionList dpl = convertLoopCorner(lP);
+                    // add height
+                    dpl.stream().forEach(p -> p.setZ(p.getZ() + height));
+                    // make sure the face is closed
+                    dpl.add(dpl.get(0));
+                    // TODO we might want to check the orientation before reversing?
+                    dpl.reverse();// ???
+                    if (poly.getExterior() == null) {
+                        poly.setExterior(new GM_Ring(new GM_LineString(dpl)));
+                    } else {
+                        poly.addInterior(new GM_Ring(new GM_LineString(dpl)));
+                    }
                 }
+                return Stream.of((IOrientableSurface) poly);
+            } else {
+                return Stream.empty();
             }
-            System.err.println("polygon =\n" + poly);
-            return Stream.of((IOrientableSurface) poly);
-        } else {
-            return Stream.empty();
-        }
         }).toList();
     }
 
     private static double averageHeight(GM_Polygon p) {
         List<IDirectPosition> list = p.getExterior().coord().getList();
-        // PlanEquation pe = new ApproximatedPlanEquation(p);
-        // Vecteur normal = pe.getNormale().getNormalised();
-        // System.err.println(normal.getX() + ", " + normal.getY() + ", " + normal.getZ());
         list.remove(list.size() - 1);
         return list.stream().map(c -> c.getZ()).collect(Collectors.summingDouble(Double::doubleValue)) / list.size();
     }
@@ -258,27 +252,20 @@ public class ExportAsCityGML {
     }
 
     public static void main(String[] args) throws CityGMLWriteException, JAXBException, CityGMLContextException {
-        String outputFolder = "./output_roof/";
+        String outputFolder = "./output/";
+        String outputFileName = "city_union_out_3d.gml";
         double roofAngleInDegrees = 40.0;
         // we have to do the 90° - angle trick because of camp skeleton
-        ExportAsCityGML.roofAngle = (90.0-roofAngleInDegrees) * Math.PI / 180.0;
-        // String outputFolder = "./output/";
+        ExportAsCityGML.roofAngle = (90.0 - roofAngleInDegrees) * Math.PI / 180.0;
         IPopulation<IFeature> exported = ShapefileReader.read(outputFolder + "out.shp");
-        System.out.println("ALL DONE! " + (outputFolder + "out.shp"));
         File folder = new File(App.class.getClassLoader().getResource("munich_full/").getPath());
         IFeatureCollection<IFeature> fensters = Loader.readShapefile(new File(folder, "fenster.shp"));
-
         CityGMLContext context = CityGMLContext.newInstance();
-
         CityGMLVersion version = CityGMLVersion.v2_0;
         CityGMLOutputFactory out = context.createCityGMLOutputFactory(version);
-        // CityGMLOutputFactory out =
-        // context.createCityGMLBuilder().createCityGMLOutputFactory(version);
-        // CityModel city = new CityModel();
         idCreator = DefaultIdCreator.getInstance();
         factory = GeometryFactory.newInstance().withIdCreator(idCreator);
         List<Building> outBuildings = new ArrayList<>();
-        // MyGeometryVisitor visitor = new MyGeometryVisitor();
         double maxBuildingHeight = 0.0;
         // we group buildings by parcel and window
         Map<String, List<IFeature>> grouped = exported.stream()
@@ -295,163 +282,68 @@ public class ExportAsCityGML {
             double longestEdgeLength = 0;
             ILineString longestEdge = null;
             for (IFeature building : buildings) {
-                // System.err.println(building.getGeom());
                 @SuppressWarnings("unchecked")
                 GM_MultiSurface<? extends IOrientableSurface> buildingGeometry = (GM_MultiSurface<? extends IOrientableSurface>) building
                         .getGeom();
-                // buildingGeometry.getList().forEach(g -> System.err.println("H1 = " +
-                // averageHeight((GM_Polygon) g)));
                 List<IOrientableSurface> roundedList = buildingGeometry.getList().stream()
                         .map(o -> (IOrientableSurface) roundPolygon((GM_Polygon) o)).toList();
-                // roundedList.forEach(g -> System.err.println("H2 = " +
-                // averageHeight((GM_Polygon) g)));
                 List<IOrientableSurface> list = roundedList.stream()
                         .map(s -> (IOrientableSurface) new JtsAlgorithms().translate(s, 0.0, 0.0, 508.0)).toList();
-                // list.forEach(g -> System.err.println("H3 = " + averageHeight((GM_Polygon)
-                // g)));
                 BuildingFace roof = getRoofFromCuboid(list);
-                // FIXME maybe we should compute the longest edge for the entire window?
                 ILineString edge = longestEdge(((IPolygon) roof.surface).getExterior().coord());
                 if (edge.length() > longestEdgeLength) {
                     longestEdgeLength = edge.length();
                     longestEdge = edge;
                 }
-                // System.err.println("Roof = " + roof);
                 List<IOrientableSurface> newList = new ArrayList<>(list);
                 newList.remove(roof.surface);
                 // put the roof in the proper orientation
                 newList.add(new GM_Polygon(new GM_LineString(roof.surface.coord().reverse())));
-                // newList.addAll(getGableRoof(roof.surface));
-                // System.err.println("NewList = " + newList);
                 IGeometry geom = new GM_Solid(newList);
-                // System.err.println("Solid = " + geom);
-                // System.err.println(geom);
-                if (union == null) {
-                    union = geom;
-                } else {
-                    union = BooleanOperators.compute(new DefaultFeature(union), new DefaultFeature(geom),
-                            BooleanOperators.UNION);
-                }
+                union = (union == null) ? geom
+                        : BooleanOperators.compute(new DefaultFeature(union), new DefaultFeature(geom),
+                                BooleanOperators.UNION);
             }
             if (union != null) {
                 Building building = new Building();
+                building.setId(idCreator.createId());
                 List<IOrientableSurface> list = ((GM_Solid) union).getFacesList();
                 final List<IOrientableSurface> newList = new ArrayList<>(list);
                 if (roofShape.equals("SD")) {
                     // gable roof
-                    // System.err.println("longestEdge = " + longestEdge);
                     List<IOrientableSurface> roofSurfaces = getRoofSurfaces(list);
-                    // System.err.println("list1 = " + newList.size());
-                    // newList.forEach(p -> System.err.println("list1 = (" + newList.indexOf(p) + ") = " + p));
-                    // System.err.println("roof = " + roofSurfaces.size());
-                    // roofSurfaces.forEach(p -> System.err.println("roof = (" + newList.indexOf(p) + ") = " + p));
                     newList.removeAll(roofSurfaces);
-                    // newList.forEach(p -> System.err
-                    //         .println("test1 = (" + new JtsAlgorithms().equals(p, roofSurfaces.get(0)) + ") = " + p));
-
-                    // newList.forEach(p -> {
-                    //     try {
-                    //         System.err.println("test2 = (" + JtsGeOxygene.makeJtsGeom(p));
-                    //     } catch (Exception e) {
-                    //         e.printStackTrace();
-                    //     }
-                    // });
-                    // org.locationtech.jts.geom.GeometryFactory fact = new org.locationtech.jts.geom.GeometryFactory(
-                    //         new PrecisionModel(), newList.get(0).getCRS());
-                    // newList.forEach(p -> {
-                    //     try {
-                    //         System.err.println("test3 = (" + AdapterFactory.toGeometry(fact, p, false));
-                    //     } catch (Exception e) {
-                    //         e.printStackTrace();
-                    //     }
-                    // });
-                    // newList.forEach(p -> {
-                    //     try {
-                    //         System.err.println("test4 = (" + fact.createPolygon(
-                    //                 (org.locationtech.jts.geom.LinearRing) AdapterFactory.toGeometry(fact,
-                    //                         ((IPolygon) p).getExterior(), false),
-                    //                 AdapterFactory.toLinearRingArray(fact,
-                    //                         ((IPolygon) p).getInterior(), false)));
-                    //     } catch (Exception e) {
-                    //         e.printStackTrace();
-                    //     }
-                    // });
-                    // System.err.println("test5");
-                    // newList.forEach(p -> {
-                    //     ((IPolygon) p).getExterior().coord()
-                    //             .forEach(c -> System.err.println(AdapterFactory.toCoordinate(c)));
-                    // });
-                    // System.err.println("test6");
-                    // newList.forEach(p -> {
-                    //     CoordinateSequence sequence = AdapterFactory.toCoordinateSequence(fact,
-                    //             ((IPolygon) p).getExterior().coord(), false);
-                    //     for (int i = 0; i < sequence.size(); i++) {
-                    //         System.err.println(sequence.getCoordinate(i));
-                    //     }
-                    //     System.err.println(fact.createPolygon(sequence));
-                    // });
-
-                    // roofSurfaces.forEach(roof -> newList.remove(roof));// FIXME: floor is removed instead !???
-                    // System.err.println("list2 = " + newList.size());
-                    // newList.forEach(p -> System.err.println("list2 = (" + newList.indexOf(p) + ") = " + p));
                     final ILineString edge = longestEdge;
                     // create the gable roofs
                     List<IOrientableSurface> aggregatedRoofSurfaces = getAggregatedRoofs(roofSurfaces);
                     List<IOrientableSurface> newRoofSurfaces = aggregatedRoofSurfaces.stream()
                             .flatMap(r -> getGableRoof(r, edge).stream()).toList();
                     newList.addAll(newRoofSurfaces);
-                    // project cuboids to parcel/window
-                    // merge close points from cuboids
+                    // TODO project cuboids to parcel/window
+                    // TODO merge close points from cuboids
                 }
-                GM_Solid solid = new GM_Solid(newList);// (GM_Solid) union;
+                GM_Solid solid = new GM_Solid(newList);
                 double min = solid.coord().stream().map(c -> c.getZ()).mapToDouble(Double::doubleValue).min()
                         .getAsDouble();
                 double max = solid.coord().stream().map(c -> c.getZ()).mapToDouble(Double::doubleValue).max()
                         .getAsDouble();
                 double height = max - min;
                 maxBuildingHeight = Math.max(maxBuildingHeight, height);
-                System.err.println(solid);
-                // building.setLod2Solid(convert(solid));
                 convert(building, solid);
-                // System.err.println(building.getLod2Solid());
-                // ((Solid)
-                // building.getLod2Solid().getObject()).getExterior().getObject().accept(visitor);
-                // Envelope envelope = getEnvelope(union.envelope(), min, max);
-                // building.setBoundedBy(new BoundingShape(envelope));
                 Envelope envelope = building.computeEnvelope();
+                envelope.setSrsName("EPSG:25832");
                 building.setBoundedBy(new BoundingShape(envelope));
                 Length l = new Length();
                 l.setUom("m");
                 l.setValue(height);
-                // building.setMeasuredHeight(l);
                 building.getHeights().add(new HeightProperty(Height.ofMeasuredHeight(l)));
+                building.getGenericAttributes()
+                        .add(new AbstractGenericAttributeProperty(new StringAttribute("RoofShape", roofShape)));
                 outBuildings.add(building);
-                // CityObjectMember object = new CityObjectMember();
-                // object.setCityObject(building);
-                // city.addCityObjectMember(object);
             }
         }
-        System.err.println("MAX Building Height = " + maxBuildingHeight);
         Envelope envelope = getEnvelope(exported.getEnvelope(), 508.0, 508.0 + maxBuildingHeight);
-        // city.setBoundedBy(new BoundingShape(envelope));
-        // Appearance appearance = new Appearance();
-        // X3DMaterial m = new X3DMaterial();
-        // m.setDiffuseColor(new Color(1.0, 0.0, 0.0));
-        // m.setTarget(visitor.getIds());
-        // SurfaceDataProperty property = new SurfaceDataProperty(m);
-        // appearance.addSurfaceDataMember(property);
-        // city.setAppearanceMember(Arrays.asList(new AppearanceMember(appearance)));
-
-        // File output = new File(p.get("result").toString() + "city_union_out_3d.gml");
-        File output = new File(outputFolder + "city_union_out_3d.gml");
-        // System.out.println("Writing the feature as CityGML " + version + " file " +
-        // output);
-        // CityGMLWriter writer = out.createCityGMLWriter(output,
-        // StandardCharsets.UTF_8.name());
-        // writer.setIndentString(" ");
-        // writer.write(city);
-        // writer.close();
-
+        File output = new File(outputFolder + outputFileName);
         try (CityGMLChunkWriter writer = out.createCityGMLChunkWriter(output, StandardCharsets.UTF_8.name())) {
             writer.withIndent("  ")
                     .withDefaultSchemaLocations()
@@ -459,10 +351,7 @@ public class ExportAsCityGML {
                     .withDefaultNamespace(CoreModule.of(version).getNamespaceURI())
                     .withHeaderComment("File created with citygml4j");
 
-            System.out.println("Setting metadata on the CityModel of the output file");
             writer.getCityModelInfo().setBoundedBy(new BoundingShape(envelope));
-
-            System.out.println("Writing the building object to the file");
             outBuildings.forEach(building -> {
                 try {
                     writer.writeMember(building);
@@ -471,9 +360,12 @@ public class ExportAsCityGML {
                 }
             });
         }
-
-        System.out.println("ALL DONE! city_union_out_3d.gml");
+        System.out.println("ALL DONE!");
     }
+
+    private static List<Code> groundNames = Arrays.asList(new Code("Ground"));
+    private static List<Code> wallNames = Arrays.asList(new Code("Wall"));
+    private static List<Code> roofNames = Arrays.asList(new Code("Roof"));
 
     private static void convert(Building building, GM_Solid solid) {
         List<Polygon> polygons = new ArrayList<>();
@@ -483,22 +375,28 @@ public class ExportAsCityGML {
             Vecteur normal = pe.getNormale().getNormalised();
             Polygon p = factory.createPolygon(polygon.getExterior().coord().toArray3D(), 3);
             if (normal.getZ() < 0) {
-                building.addBoundary(processBoundarySurface(new GroundSurface(), p));
+                building.addBoundary(processBoundarySurface(new GroundSurface(), groundNames, p));
             } else if (normal.getZ() > 0) {
-                building.addBoundary(processBoundarySurface(new RoofSurface(), p));
+                building.addBoundary(processBoundarySurface(new RoofSurface(), roofNames, p));
             } else {
-                building.addBoundary(processBoundarySurface(new WallSurface(), p));
+                building.addBoundary(processBoundarySurface(new WallSurface(), wallNames, p));
             }
             polygons.add(p);
         });
         Shell shell = new Shell();
         polygons.stream().map(p -> new SurfaceProperty("#" + p.getId())).forEach(shell.getSurfaceMembers()::add);
-        building.setLod2Solid(new SolidProperty(new Solid(shell)));
+        Solid gmlSolid = new Solid(shell);
+        gmlSolid.setId(idCreator.createId());
+        gmlSolid.setSrsDimension(3);
+        gmlSolid.setSrsName("EPSG:25832");
+        building.setLod2Solid(new SolidProperty(gmlSolid));
     }
 
     private static AbstractSpaceBoundaryProperty processBoundarySurface(AbstractThematicSurface thematicSurface,
+            List<Code> names,
             Polygon... polygons) {
         thematicSurface.setId(idCreator.createId());
+        thematicSurface.setNames(names);
         thematicSurface.setLod2MultiSurface(new MultiSurfaceProperty(factory.createMultiSurface(polygons)));
         return new AbstractSpaceBoundaryProperty(thematicSurface);
     }

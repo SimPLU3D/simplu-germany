@@ -2,6 +2,7 @@ package io.github.veragotze;
 
 import java.util.List;
 
+import org.locationtech.jts.algorithm.Angle;
 import org.locationtech.jts.algorithm.Orientation;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.GeometryFactory;
@@ -56,11 +57,19 @@ public class TwoSidedAttachedCuboid extends Cuboid {
         pts[1] = distOp2.nearestPoints()[0];
         pts[2] = distOp4.nearestPoints()[0];
         pts[3] = distOp3.nearestPoints()[0];
-        pts[4] = new Coordinate(pts[0]);
+        pts[4] = pts[0];
         LinearRing ring = this.referenceLine.getFactory().createLinearRing(pts);
         if (!Orientation.isCCW(pts)) ring = ring.reverse();
         Polygon poly = this.referenceLine.getFactory().createPolygon(ring, null);
         this.geomJTS = poly;
+        // we approximate the length
+        double l1 = pts[0].distance(pts[1]);
+        double l2 = pts[2].distance(pts[3]);
+        this.length = (l1+l2)/2;
+        // we approximate the orientation
+        double a1 = Angle.angle(pts[0], pts[1]);
+        double a2 = Angle.angle(pts[2], pts[3]);
+        this.orientation = (a1+a2)/2;
     }
 
     private void computeBisector() {
